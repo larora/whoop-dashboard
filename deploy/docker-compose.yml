@@ -1,0 +1,11 @@
+# Alternative to the docker run line in SETUP.md, Option A:  docker compose up -d --build
+services:
+  whoop:
+    build: ..
+    container_name: whoop
+    restart: unless-stopped
+    env_file: ../.env          # set DATA_DIR=/data in it
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/lib/whoop:/data

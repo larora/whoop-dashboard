@@ -51,7 +51,7 @@ If you have a WHOOP, you can run this for your own data. It takes about 15 minut
 3. `uv pip install -r requirements.txt` (or plain `pip`), then `uvicorn app.main:app --port 8080`.
 4. Open http://localhost:8080, sign in, click **Connect WHOOP**.
 
-To keep it running in the cloud, [SETUP.md](SETUP.md) has the exact Fly.io commands, how to point Claude at the MCP endpoint, and troubleshooting. Deploying takes another 10 minutes.
+To keep it running permanently, [SETUP.md](SETUP.md) walks through hosting it on your own server (Docker or systemd, with HTTPS via Caddy), on Fly.io, or on a PaaS, plus how to point Claude at the MCP endpoint and troubleshooting. Ready-made config files are in `deploy/`.
 
 If you don't have a WHOOP, `python scripts/seed_demo.py` gives you a dashboard full of sample data to click around in.
 
@@ -68,8 +68,9 @@ app/
   templates/     dashboard.html, login.html
 scripts/seed_demo.py   sample data generator
 tests/                 15 tests, mocked WHOOP API
-Dockerfile, fly.toml   deployment
-SETUP.md               setup, deploy and operations guide
+Dockerfile, fly.toml   container build and Fly.io config
+deploy/                systemd unit, Caddyfile, docker-compose for self-hosting
+SETUP.md               step-by-step setup and hosting guide
 ```
 
 ## What I'd do next

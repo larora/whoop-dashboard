@@ -1,0 +1,12 @@
+# HTTPS reverse proxy in front of the dashboard. Replace the domain, then:
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# Caddy obtains and renews the certificate automatically (your DNS must point at this server).
+whoop.example.com {
+    reverse_proxy 127.0.0.1:8080
+    encode gzip
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+    }
+}

@@ -1,0 +1,24 @@
+# systemd unit for running the dashboard without Docker. See SETUP.md, Option B.
+# Install: sudo cp deploy/whoop-dashboard.service /etc/systemd/system/ && sudo systemctl enable --now whoop-dashboard
+[Unit]
+Description=WHOOP dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=whoop
+Group=whoop
+WorkingDirectory=/opt/whoop/app
+EnvironmentFile=/opt/whoop/app/.env
+ExecStart=/opt/whoop/app/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=5
+# Hardening: the app only needs its own folder and the data dir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/whoop/data
+
+[Install]
+WantedBy=multi-user.target
