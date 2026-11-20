@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WHOOP Health Dashboard</title>
+<style>
+:root{
+  --bg:#f6f7f9;--card:#fff;--ink:#14171c;--muted:#6b7280;--line:#e5e7eb;--grid:#eef0f3;
+  --green:#16a34a;--yellow:#d4a106;--red:#dc2626;--blue:#2563eb;--purple:#7c3aed;--teal:#0d9488;--orange:#ea580c;
+  --light:#93c5fd;--sws:#7c3aed;--rem:#22d3ee;--accent:#14171c;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d0f12;--card:#161a20;--ink:#e8eaed;--muted:#9aa3af;--line:#262b33;--grid:#1f242b;
+  --green:#22c55e;--yellow:#eab308;--red:#ef4444;--blue:#60a5fa;--purple:#a78bfa;--teal:#2dd4bf;--orange:#fb923c;
+  --light:#3b82f6;--sws:#8b5cf6;--rem:#22d3ee;--accent:#e8eaed;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 16px 48px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13px}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;color:var(--muted);font:inherit;font-weight:600;padding:6px 12px;border-radius:7px;cursor:pointer}
+.seg button.on{background:var(--accent);color:var(--bg)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.kpi .lbl{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.kpi .val{font-size:30px;font-weight:700;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+.kpi .val small{font-size:14px;color:var(--muted);font-weight:600;margin-left:2px}
+.kpi .cmp{font-size:12px;color:var(--muted)}
+.up{color:var(--green)}.down{color:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.full{grid-column:1/-1}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.card h2{font-size:14px;margin:0 0 2px}
+.card .note{color:var(--muted);font-size:12px;margin-bottom:8px}
+.chart{position:relative;width:100%;height:220px}
+.chart svg{display:block;width:100%;height:100%;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 8px;border-radius:6px;white-space:nowrap;opacity:0;transition:opacity .1s;z-index:2}
+.insights{margin:0;padding-left:18px}.insights li{margin:4px 0}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:12px}
+.tbl{overflow-x:auto}
+.zbar{display:flex;height:8px;width:120px;border-radius:4px;overflow:hidden;background:var(--grid)}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{font:inherit;font-weight:600;font-size:13px;padding:7px 14px;border-radius:10px;border:1px solid var(--line);background:var(--accent);color:var(--bg);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.btn.ghost{background:var(--card);color:var(--ink)}
+.btn.primary{font-size:15px;padding:10px 20px}
+.btn:disabled{opacity:.6;cursor:default}
+.spin{display:none;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite}
+.btn.busy .spin{display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.err{color:var(--red);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>WHOOP Health Dashboard</h1><div class="sub" id="gen">Loading…</div></div>
+    <div class="ctl">
+      <div class="seg" id="range">
+        <button data-d="30">30D</button><button data-d="90" class="on">90D</button><button data-d="180">6M</button><button data-d="365">1Y</button><button data-d="0">All</button>
+      </div>
+      <button class="btn" id="syncBtn" type="button"><span class="spin"></span><span class="txt">Sync now</span></button>
+      <form method="post" action="/logout" style="margin:0"><button class="btn ghost" type="submit">Logout</button></form>
+    </div>
+  </header>
+  <div id="root"></div>
+</div>
+<script>
+{% raw %}
+let DATA = null; // filled by load()
+const $ = (s, el=document) => el.querySelector(s);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const NS = "http://www.w3.org/2000/svg";
+const avg = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((p, c) => p + c, 0) / v.length : null; };
+const fmt = (x, d=0) => x == null ? "–" : Number(x).toFixed(d);
+const recColor = v => v == null ? css("--grid") : v >= 67 ? css("--green") : v >= 34 ? css("--yellow") : css("--red");
+const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const dayLabel = d => { const t = new Date(d + "T12:00:00"); return t.toLocaleDateString(undefined, {month:"short", day:"numeric"}); };
+function rolling(arr, n) { return arr.map((_, i) => { const w = arr.slice(Math.max(0, i - n + 1), i + 1); return w.filter(x => x != null).length >= Math.min(3, n) ? avg(w) : null; }); }
+
+function el(tag, attrs={}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+/* Generic time-series chart: stacked bars + lines on one y-axis (optional right axis for lines with axis:"r") */
+function tsChart(host, labels, {bars=[], lines=[], yMin, yMax, rMin, rMax, barColor, tip}) {
+  host.innerHTML = ""; const W = host.clientWidth || 600, H = host.clientHeight || 220;
+  const pad = {l:34, r: lines.some(l => l.axis === "r") ? 34 : 8, t:8, b:22};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, n = labels.length;
+  const svg = el("svg", {viewBox:`0 0 ${W} ${H}`}, host);
+  const tipEl = document.createElement("div"); tipEl.className = "tip"; host.appendChild(tipEl);
+  const stackTop = labels.map((_, i) => bars.reduce((s, b) => s + (b.values[i] || 0), 0));
+  const leftVals = [...stackTop, ...lines.filter(l => l.axis !== "r").flatMap(l => l.values)].filter(v => v != null);
+  const lo = yMin ?? Math.floor(Math.min(...leftVals) * 0.95), hi = yMax ?? Math.ceil(Math.max(...leftVals) * 1.05);
+  const rVals = lines.filter(l => l.axis === "r").flatMap(l => l.values).filter(v => v != null);
+  const rlo = rMin ?? Math.floor(Math.min(...rVals) * 0.95), rhi = rMax ?? Math.ceil(Math.max(...rVals) * 1.05);
+  const x = i => pad.l + (n <= 1 ? iw / 2 : (i + 0.5) * iw / n);
+  const y = v => pad.t + ih - (v - lo) / ((hi - lo) || 1) * ih;
+  const yr = v => pad.t + ih - (v - rlo) / ((rhi - rlo) || 1) * ih;
+  for (let k = 0; k <= 4; k++) {
+    const v = lo + (hi - lo) * k / 4, yy = y(v);
+    el("line", {x1:pad.l, x2:W - pad.r, y1:yy, y2:yy, stroke:css("--grid")}, svg);
+    el("text", {x:pad.l - 6, y:yy + 4, "text-anchor":"end", "font-size":10, fill:css("--muted")}, svg).textContent = +v.toFixed(hi - lo < 10 ? 1 : 0);
+    if (rVals.length) el("text", {x:W - pad.r + 6, y:yr(rlo + (rhi - rlo) * k / 4) + 4, "font-size":10, fill:css("--muted")}, svg).textContent = Math.round(rlo + (rhi - rlo) * k / 4);
+  }
+  const step = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(iw / 70))));
+  labels.forEach((d, i) => { if (i % step === 0) el("text", {x:x(i), y:H - 6, "text-anchor":"middle", "font-size":10, fill:css("--muted")}, svg).textContent = dayLabel(d); });
+  const bw = Math.max(1, iw / n * 0.72);
+  labels.forEach((_, i) => {
+    let base = lo;
+    bars.forEach(b => { const v = b.values[i]; if (v == null) return;
+      el("rect", {x:x(i) - bw / 2, y:y(base + v), width:bw, height:Math.max(0, y(base) - y(base + v)), rx: bars.length > 1 ? 0 : Math.min(2, bw / 3), fill: barColor ? barColor(v, i) : b.color}, svg); base += v; });
+  });
+  lines.forEach(l => {
+    const Y = l.axis === "r" ? yr : y; let dStr = "", pen = false;
+    l.values.forEach((v, i) => { if (v == null) { pen = false; return; } dStr += (pen ? "L" : "M") + x(i).toFixed(1) + "," + Y(v).toFixed(1); pen = true; });
+    el("path", {d:dStr, fill:"none", stroke:l.color, "stroke-width":l.width || 2, "stroke-dasharray":l.dash || "", "stroke-linejoin":"round", "stroke-linecap":"round"}, svg);
+  });
+  const cursor = el("line", {y1:pad.t, y2:pad.t + ih, stroke:css("--muted"), "stroke-dasharray":"3 3", opacity:0}, svg);
+  svg.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+    const i = Math.min(n - 1, Math.max(0, Math.floor((px - pad.l) / iw * n)));
+    cursor.setAttribute("x1", x(i)); cursor.setAttribute("x2", x(i)); cursor.setAttribute("opacity", 1);
+    tipEl.innerHTML = `<b>${dayLabel(labels[i])}</b><br>` + tip(i); tipEl.style.opacity = 1;
+    const tx = x(i) * r.width / W; tipEl.style.left = Math.min(r.width - tipEl.offsetWidth, Math.max(0, tx - tipEl.offsetWidth / 2)) + "px"; tipEl.style.top = "-6px";
+  });
+  svg.addEventListener("mouseleave", () => { tipEl.style.opacity = 0; cursor.setAttribute("opacity", 0); });
+}
+
+function scatter(host, pts, {xLabel, yLabel}) {
+  host.innerHTML = ""; const W = host.clientWidth || 600, H = host.clientHeight || 220, pad = {l:34, r:8, t:8, b:30};
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, svg = el("svg", {viewBox:`0 0 ${W} ${H}`}, host);
+  if (!pts.length) return;
+  const xs = pts.map(p => p[0]), xlo = Math.floor(Math.min(...xs)), xhi = Math.ceil(Math.max(...xs));
+  const X = v => pad.l + (v - xlo) / ((xhi - xlo) || 1) * iw, Y = v => pad.t + ih - v / 100 * ih;
+  [0, 33, 67, 100].forEach(v => { el("line", {x1:pad.l, x2:W - pad.r, y1:Y(v), y2:Y(v), stroke:css("--grid")}, svg); el("text", {x:pad.l - 6, y:Y(v) + 4, "text-anchor":"end", "font-size":10, fill:css("--muted")}, svg).textContent = v; });
+  for (let v = xlo; v <= xhi; v += Math.max(1, Math.round((xhi - xlo) / 6))) el("text", {x:X(v), y:H - 14, "text-anchor":"middle", "font-size":10, fill:css("--muted")}, svg).textContent = v;
+  el("text", {x:pad.l + iw / 2, y:H - 1, "text-anchor":"middle", "font-size":10, fill:css("--muted")}, svg).textContent = xLabel;
+  pts.forEach(p => el("circle", {cx:X(p[0]), cy:Y(p[1]), r:3.5, fill:recColor(p[1]), opacity:.75}, svg));
+  const n = pts.length, mx = avg(xs), my = avg(pts.map(p => p[1]));
+  const sxx = pts.reduce((s, p) => s + (p[0] - mx) ** 2, 0), sxy = pts.reduce((s, p) => s + (p[0] - mx) * (p[1] - my), 0);
+  if (n > 5 && sxx) { const b = sxy / sxx, a = my - b * mx; el("line", {x1:X(xlo), y1:Y(a + b * xlo), x2:X(xhi), y2:Y(a + b * xhi), stroke:css("--ink"), "stroke-width":1.5, "stroke-dasharray":"5 4"}, svg); }
+}
+
+function corr(a, b) {
+  const p = a.map((v, i) => [v, b[i]]).filter(q => q[0] != null && q[1] != null); if (p.length < 8) return null;
+  const mx = avg(p.map(q => q[0])), my = avg(p.map(q => q[1]));
+  let sxy = 0, sxx = 0, syy = 0; p.forEach(([u, v]) => { sxy += (u - mx) * (v - my); sxx += (u - mx) ** 2; syy += (v - my) ** 2; });
+  return sxx && syy ? sxy / Math.sqrt(sxx * syy) : null;
+}
+
+let RANGE = 90;
+function render() {
+  const root = $("#root");
+  if (!DATA) { root.innerHTML = `<div class="card empty">Loading…</div>`; return; }
+  if (!DATA.whoop_connected) { root.innerHTML = `<div class="card empty"><p>Connect your WHOOP account to start syncing.</p><a class="btn primary" href="/auth/whoop">Connect WHOOP</a></div>`; return; }
+  if (!DATA.days || !DATA.days.length) { root.innerHTML = `<div class="card empty">${DATA.sync_running ? "First sync in progress…" : "No data yet. Click <b>Sync now</b>."}${DATA.sync_error ? `<div class="err">${DATA.sync_error}</div>` : ""}</div>`; return; }
+  $("#gen").innerHTML = `${DATA.days.length} days of history${DATA.sync_error ? ` · <span class="err">last sync failed: ${DATA.sync_error}</span>` : ""}`;
+  const all = DATA.days, days = RANGE ? all.slice(-RANGE) : all, L = days.map(d => d.d), col = k => days.map(d => d[k]);
+  const lastRec = [...all].reverse().find(d => d.rec != null) || all[all.length - 1];
+  const base30 = all.slice(-31, -1);
+  const kpi = (lbl, v, unit, key, dec=0, higherBetter=true) => {
+    const b = avg(base30.map(d => d[key])); let cmp = "30-day avg –";
+    if (v != null && b != null) { const diff = v - b, good = higherBetter ? diff >= 0 : diff <= 0;
+      cmp = `<span class="${good ? "up" : "down"}">${diff >= 0 ? "▲" : "▼"} ${Math.abs(diff).toFixed(dec)}</span> vs 30-day avg ${b.toFixed(dec)}`; }
+    return `<div class="card kpi"><div class="lbl">${lbl}</div><div class="val" ${key === "rec" ? `style="color:${recColor(v)}"` : ""}>${fmt(v, dec)}<small>${unit}</small></div><div class="cmp">${cmp}</div></div>`;
+  };
+  root.innerHTML = `
+  <div class="kpis">
+    ${kpi("Recovery", lastRec.rec, "%", "rec")}
+    ${kpi("HRV", lastRec.hrv, "ms", "hrv", 0)}
+    ${kpi("Resting HR", lastRec.rhr, "bpm", "rhr", 0, false)}
+    ${kpi("Sleep", lastRec.sleep, "h", "sleep", 1)}
+    ${kpi("Day strain", all[all.length - 1].strain, "", "strain", 1)}
+  </div>
+  <div class="grid">
+    <div class="card full"><h2>What the data says</h2><div class="note">Auto-generated from your history — patterns, not medical advice.</div><ul class="insights" id="ins"></ul></div>
+    <div class="card full"><h2>Recovery</h2><div class="note">Daily score with 7-day average</div><div class="chart" id="cRec"></div>
+      <div class="legend"><span><i style="background:var(--green)"></i>67–100</span><span><i style="background:var(--yellow)"></i>34–66</span><span><i style="background:var(--red)"></i>0–33</span><span><i style="background:var(--ink);height:2px"></i>7-day avg</span></div></div>
+    <div class="card"><h2>HRV & resting heart rate</h2><div class="note">7-day averages · HRV left axis, RHR right axis</div><div class="chart" id="cHrv"></div>
+      <div class="legend"><span><i style="background:var(--purple)"></i>HRV (ms)</span><span><i style="background:var(--orange)"></i>RHR (bpm)</span></div></div>
+    <div class="card"><h2>Sleep stages vs need</h2><div class="note">Hours asleep per night</div><div class="chart" id="cSleep"></div>
+      <div class="legend"><span><i style="background:var(--light)"></i>Light</span><span><i style="background:var(--sws)"></i>Deep (SWS)</span><span><i style="background:var(--rem)"></i>REM</span><span><i style="background:var(--ink);height:2px"></i>Sleep need</span></div></div>
+    <div class="card"><h2>Day strain</h2><div class="note">Daily strain with 7-day average</div><div class="chart" id="cStrain"></div></div>
+    <div class="card"><h2>Strain → next-day recovery</h2><div class="note">Each dot is a day; dashed line is the trend</div><div class="chart" id="cScatter"></div></div>
+    <div class="card"><h2>Recovery by weekday</h2><div class="note">Average recovery for the selected range</div><div class="chart" id="cDow" style="height:180px"></div></div>
+    <div class="card"><h2>Sleep quality</h2><div class="note">Performance, efficiency, consistency (%) · 7-day avg</div><div class="chart" id="cQual" style="height:180px"></div>
+      <div class="legend"><span><i style="background:var(--blue)"></i>Performance</span><span><i style="background:var(--teal)"></i>Efficiency</span><span><i style="background:var(--muted)"></i>Consistency</span></div></div>
+    <div class="card full"><h2>Recent workouts</h2><div class="tbl"><table id="wk"></table></div></div>
+  </div>`;
+
+  tsChart($("#cRec"), L, {bars:[{values:col("rec")}], barColor:v => recColor(v), lines:[{values:rolling(col("rec"), 7), color:css("--ink")}], yMin:0, yMax:100,
+    tip:i => `Recovery <b>${fmt(days[i].rec)}%</b> · HRV ${fmt(days[i].hrv)} ms · RHR ${fmt(days[i].rhr)}`});
+  tsChart($("#cHrv"), L, {lines:[{values:rolling(col("hrv"), 7), color:css("--purple")}, {values:rolling(col("rhr"), 7), color:css("--orange"), axis:"r"},
+    {values:col("hrv"), color:css("--purple"), width:1, dash:"2 3"}],
+    tip:i => `HRV <b>${fmt(days[i].hrv)} ms</b> · RHR <b>${fmt(days[i].rhr)} bpm</b>`});
+  tsChart($("#cSleep"), L, {bars:[{values:col("light"), color:css("--light")}, {values:col("sws"), color:css("--sws")}, {values:col("rem"), color:css("--rem")}],
+    lines:[{values:col("need"), color:css("--ink"), width:1.5, dash:"4 3"}], yMin:0,
+    tip:i => { const d = days[i]; return `Asleep <b>${fmt(d.sleep, 1)} h</b> / need ${fmt(d.need, 1)} h<br>Light ${fmt(d.light, 1)} · Deep ${fmt(d.sws, 1)} · REM ${fmt(d.rem, 1)}<br>Bedtime ${d.bed || "–"} · ${fmt(d.dist)} disturbances`; }});
+  tsChart($("#cStrain"), L, {bars:[{values:col("strain"), color:css("--blue")}], lines:[{values:rolling(col("strain"), 7), color:css("--ink")}], yMin:0, yMax:21,
+    tip:i => `Strain <b>${fmt(days[i].strain, 1)}</b> · ${fmt(days[i].kcal)} kcal`});
+  const pts = []; for (let i = 0; i < days.length - 1; i++) if (days[i].strain != null && days[i + 1].rec != null) pts.push([days[i].strain, days[i + 1].rec]);
+  scatter($("#cScatter"), pts, {xLabel:"Day strain", yLabel:"Next-day recovery"});
+
+  const dowAvg = DOW.map((_, k) => avg(days.filter(d => new Date(d.d + "T12:00:00").getDay() === k).map(d => d.rec)));
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  (function dow(host) {
+    host.innerHTML = ""; const W = host.clientWidth || 500, H = host.clientHeight || 180, svg = el("svg", {viewBox:`0 0 ${W} ${H}`}, host);
+    const bw = (W - 20) / 7;
+    order.forEach((k, j) => { const v = dowAvg[k] ?? 0, h = (H - 36) * v / 100, xx = 10 + j * bw;
+      el("rect", {x:xx + bw * .18, y:H - 20 - h, width:bw * .64, height:h, rx:4, fill:recColor(dowAvg[k])}, svg);
+      el("text", {x:xx + bw / 2, y:H - 24 - h, "text-anchor":"middle", "font-size":11, "font-weight":600, fill:css("--ink")}, svg).textContent = fmt(dowAvg[k]);
+      el("text", {x:xx + bw / 2, y:H - 5, "text-anchor":"middle", "font-size":11, fill:css("--muted")}, svg).textContent = DOW[k]; });
+  })($("#cDow"));
+  tsChart($("#cQual"), L, {lines:[{values:rolling(col("perf"), 7), color:css("--blue")}, {values:rolling(col("eff"), 7), color:css("--teal")}, {values:rolling(col("cons"), 7), color:css("--muted")}],
+    tip:i => `Perf ${fmt(days[i].perf)}% · Eff ${fmt(days[i].eff)}% · Cons ${fmt(days[i].cons)}%`});
+
+  // Insights
+  const ins = [], last7 = all.slice(-7), prev30 = all.slice(-37, -7);
+  const pct = (a, b) => a != null && b ? (a - b) / b * 100 : null;
+  const h7 = pct(avg(last7.map(d => d.hrv)), avg(prev30.map(d => d.hrv)));
+  if (h7 != null) ins.push(`7-day HRV is <b>${Math.abs(h7).toFixed(0)}% ${h7 >= 0 ? "above" : "below"}</b> your prior 30-day baseline${h7 < -10 ? " — a sign of accumulated stress, illness or poor sleep." : "."}`);
+  const r7 = avg(last7.map(d => d.rhr)) - avg(prev30.map(d => d.rhr));
+  if (!isNaN(r7)) ins.push(`Resting HR over the last week is <b>${Math.abs(r7).toFixed(1)} bpm ${r7 >= 0 ? "higher" : "lower"}</b> than baseline.`);
+  const sl = avg(last7.map(d => d.sleep)), nd = avg(last7.map(d => d.need));
+  if (sl != null && nd != null) ins.push(`You averaged <b>${sl.toFixed(1)} h</b> of sleep last week against a need of ${nd.toFixed(1)} h (${sl >= nd ? "need met" : `<b>${((nd - sl) * 60).toFixed(0)} min short</b> per night`}).`);
+  const hiS = pts.filter(p => p[0] >= 14).map(p => p[1]), loS = pts.filter(p => p[0] < 10).map(p => p[1]);
+  if (hiS.length >= 3 && loS.length >= 3) ins.push(`After high-strain days (14+), next-day recovery averages <b>${avg(hiS).toFixed(0)}%</b> vs ${avg(loS).toFixed(0)}% after light days (<10).`);
+  const ss = corr(days.map(d => d.sleep), col("rec"));
+  if (ss != null) ins.push(`Sleep duration and same-morning recovery have a correlation of <b>${ss.toFixed(2)}</b> in this range${Math.abs(ss) > .3 ? " — sleep is a meaningful lever for you." : "."}`);
+  const best = order.filter(k => dowAvg[k] != null).sort((a, b) => dowAvg[b] - dowAvg[a]);
+  if (best.length >= 5) ins.push(`Best recovery tends to be on <b>${DOW[best[0]]}</b> (${dowAvg[best[0]].toFixed(0)}%), lowest on <b>${DOW[best[best.length - 1]]}</b> (${dowAvg[best[best.length - 1]].toFixed(0)}%).`);
+  const greens = days.filter(d => d.rec >= 67).length, reds = days.filter(d => d.rec != null && d.rec < 34).length, tot = days.filter(d => d.rec != null).length;
+  if (tot) ins.push(`In this range: <b>${greens}</b> green days (${(greens / tot * 100).toFixed(0)}%), <b>${reds}</b> red days (${(reds / tot * 100).toFixed(0)}%).`);
+  $("#ins").innerHTML = ins.map(s => `<li>${s}</li>`).join("") || "<li>Not enough data yet.</li>";
+
+  // Workouts
+  const zc = ["--muted", "--light", "--blue", "--teal", "--orange", "--red"].map(css);
+  const wks = DATA.workouts.filter(w => !RANGE || w.d >= L[0]).slice(0, 25);
+  $("#wk").innerHTML = `<tr><th>Date</th><th>Activity</th><th>Duration</th><th>Strain</th><th>Avg / max HR</th><th>Distance</th><th>HR zones</th></tr>` +
+    (wks.length ? wks.map(w => { const tz = w.zones.reduce((a, b) => a + b, 0) || 1;
+      return `<tr><td>${dayLabel(w.d)} ${w.t}</td><td style="text-transform:capitalize">${w.sport}</td><td>${fmt(w.min)} min</td><td>${fmt(w.strain, 1)}</td><td>${fmt(w.avg_hr)} / ${fmt(w.max_hr)}</td><td>${w.km ? w.km + " km" : "–"}</td>
+      <td><div class="zbar">${w.zones.map((z, i) => `<span style="width:${z / tz * 100}%;background:${zc[i]}"></span>`).join("")}</div></td></tr>`; }).join("")
+      : `<tr><td colspan="7" class="sub">No workouts in this range.</td></tr>`);
+}
+document.querySelectorAll("#range button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#range button").forEach(x => x.classList.toggle("on", x === b)); RANGE = +b.dataset.d; render(); });
+let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", render);
+
+function ago(iso) {
+  if (!iso) return "never synced";
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  return m < 1 ? "synced just now" : m < 60 ? `synced ${m} min ago` : m < 1440 ? `synced ${Math.round(m / 60)} h ago` : `synced ${Math.round(m / 1440)} d ago`;
+}
+function setSyncUI() {
+  const b = $("#syncBtn"), busy = DATA && DATA.sync_running;
+  b.disabled = !!busy || !(DATA && DATA.whoop_connected); b.classList.toggle("busy", !!busy);
+  $("#syncBtn .txt").textContent = busy ? "Syncing…" : "Sync now";
+  if (DATA && DATA.whoop_connected && DATA.days && DATA.days.length) $("#gen").innerHTML += ` · ${ago(DATA.last_sync)}`;
+}
+let pollTimer;
+async function load() {
+  try {
+    const r = await fetch("/api/data", {cache:"no-store"});
+    if (r.status === 401) { location.href = "/login"; return; }
+    DATA = await r.json();
+  } catch (e) { $("#gen").textContent = "Could not load data"; return; }
+  render(); setSyncUI();
+  clearTimeout(pollTimer);
+  if (DATA.sync_running) pollTimer = setTimeout(load, 3000);
+}
+$("#syncBtn").onclick = async () => {
+  $("#syncBtn").disabled = true; $("#syncBtn").classList.add("busy"); $("#syncBtn .txt").textContent = "Syncing…";
+  const r = await fetch("/sync", {method:"POST"});
+  if (r.status === 401) { location.href = "/login"; return; }
+  pollTimer = setTimeout(load, 1500);
+};
+render(); load();
+{% endraw %}
+</script>
+</body>
+</html>
