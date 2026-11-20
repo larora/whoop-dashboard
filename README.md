@@ -119,4 +119,4 @@ This app handles personal health data. It's designed for one person running thei
 
 ---
 
-Built with Python 3.12, FastAPI, SQLite and the MCP Python SDK. Developed with help from Claude Code.
+Built with Python 3.12, FastAPI, SQLite and the MCP Python SDK. Developed with help from Claude Code. MIT licensed; see [LICENSE](LICENSE).
