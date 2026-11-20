@@ -4,16 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WHOOP Health Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230f4c66'/%3E%3Cpath d='M4 12h3.5l2-5 4 10 2-5H20' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
+/* Sea-blue theme. Light: pale sea background with white cards. Dark: deep sea background with lighter teal cards.
+   Follows the system setting; the ☀/☾ button in the header overrides it (saved in this browser). */
 :root{
-  --bg:#f6f7f9;--card:#fff;--ink:#14171c;--muted:#6b7280;--line:#e5e7eb;--grid:#eef0f3;
-  --green:#16a34a;--yellow:#d4a106;--red:#dc2626;--blue:#2563eb;--purple:#7c3aed;--teal:#0d9488;--orange:#ea580c;
-  --light:#93c5fd;--sws:#7c3aed;--rem:#22d3ee;--accent:#14171c;
+  --bg:#d6e9f0;--card:#fff;--ink:#102a36;--muted:#4f6e7c;--line:#c6dde6;--grid:#e8f2f6;
+  --green:#15803d;--yellow:#ca9a04;--red:#dc2626;--blue:#1d6fd1;--purple:#7c3aed;--teal:#0f8f86;--orange:#ea680c;
+  --light:#8ec5f5;--sws:#7c3aed;--rem:#1fc4e0;--accent:#0f4c66;
 }
+:root[data-theme="dark"]{
+  --bg:#0a2634;--card:#11394b;--ink:#e6f1f5;--muted:#93b4c2;--line:#1d4b60;--grid:#174357;
+  --green:#34d399;--yellow:#fbbf24;--red:#f87171;--blue:#60a5fa;--purple:#a78bfa;--teal:#2dd4bf;--orange:#fb923c;
+  --light:#3b82f6;--sws:#8b5cf6;--rem:#22d3ee;--accent:#e6f1f5;}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0d0f12;--card:#161a20;--ink:#e8eaed;--muted:#9aa3af;--line:#262b33;--grid:#1f242b;
-  --green:#22c55e;--yellow:#eab308;--red:#ef4444;--blue:#60a5fa;--purple:#a78bfa;--teal:#2dd4bf;--orange:#fb923c;
-  --light:#3b82f6;--sws:#8b5cf6;--rem:#22d3ee;--accent:#e8eaed;}}
+  --bg:#0a2634;--card:#11394b;--ink:#e6f1f5;--muted:#93b4c2;--line:#1d4b60;--grid:#174357;
+  --green:#34d399;--yellow:#fbbf24;--red:#f87171;--blue:#60a5fa;--purple:#a78bfa;--teal:#2dd4bf;--orange:#fb923c;
+  --light:#3b82f6;--sws:#8b5cf6;--rem:#22d3ee;--accent:#e6f1f5;}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:1180px;margin:0 auto;padding:24px 16px 48px}
@@ -24,7 +31,7 @@ h1{font-size:22px;margin:0;letter-spacing:-.01em}
 .seg button{border:0;background:none;color:var(--muted);font:inherit;font-weight:600;padding:6px 12px;border-radius:7px;cursor:pointer}
 .seg button.on{background:var(--accent);color:var(--bg)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px -16px rgba(0,0,0,.18)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(16,42,54,.05),0 10px 28px -18px rgba(16,42,54,.28)}
 .kpi .lbl{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .kpi .val{font-size:32px;font-weight:700;margin:4px 0 2px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .kpi .val small{font-size:14px;color:var(--muted);font-weight:600;margin-left:2px}
@@ -78,6 +85,7 @@ tr:hover td{background:color-mix(in srgb,var(--grid) 60%,transparent)}
 </style>
 </head>
 <body>
+<script>try{const t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 <div class="wrap">
   <header>
     <div><h1><span class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg></span>WHOOP Health Dashboard</h1><div class="sub" id="gen">Loading…</div></div>
@@ -87,6 +95,7 @@ tr:hover td{background:color-mix(in srgb,var(--grid) 60%,transparent)}
         <button data-d="7" class="on">7D</button><button data-d="30">30D</button><button data-d="90">90D</button><button data-d="180">6M</button><button data-d="365">1Y</button><button data-d="0">All</button>
       </div>
       <button class="btn" id="syncBtn" type="button"><span class="spin"></span><span class="txt">Sync now</span></button>
+      <button class="btn ghost" id="theme" type="button" title="Light / dark">☾</button>
       <form method="post" action="/logout" style="margin:0"><button class="btn ghost" type="submit">Logout</button></form>
     </div>
   </header>

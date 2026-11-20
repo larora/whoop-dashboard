@@ -138,6 +138,11 @@ document.querySelectorAll("#range button").forEach(b => b.onclick = () => { docu
 $("#prev").onclick = () => { OFFSET = Math.min(OFFSET + RANGE, Math.max(0, DATA.days.length - RANGE)); render(); };
 $("#next").onclick = () => { OFFSET = Math.max(0, OFFSET - RANGE); render(); };
 document.addEventListener("keydown", e => { if (e.target.tagName === "INPUT") return; if (e.key === "ArrowLeft" && !$("#prev").disabled) $("#prev").click(); if (e.key === "ArrowRight" && !$("#next").disabled) $("#next").click(); });
+const themeBtn = $("#theme");
+const paintThemeBtn = () => { const t = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); themeBtn.textContent = t === "dark" ? "☀" : "☾"; };
+themeBtn.onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; try { localStorage.setItem("theme", next); } catch (e) {} paintThemeBtn(); render(); };
+paintThemeBtn();
 let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", render);
 render(); load();
