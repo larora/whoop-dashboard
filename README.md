@@ -17,6 +17,8 @@ Built as a side project to learn three things end to end: working with a real OA
 
 The WHOOP app is excellent at today: today's recovery, last night's sleep, this workout. What I wanted was the week. How much have I actually slept, naps included? Have I done the runs and strength sessions I said I would? Is my pace improving? This dashboard reorganises the same data around those questions, with exact numbers rather than rings and scores, so that one screen answers them.
 
+It's a work in progress. I use it daily and keep changing it as I learn what I actually look at, so expect the layout and metrics below to evolve.
+
 **At the top: six tiles for where you stand right now**
 
 | Tile | What it shows |
