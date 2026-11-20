@@ -4,7 +4,8 @@ A self-hosted web app that pulls my WHOOP wearable data every morning, stores it
 
 Built as a side project to learn three things end to end: working with a real OAuth API, deploying a small always-on service, and building an MCP server that an AI assistant can use.
 
-> **Screenshot:** _(add `docs/dashboard.png` here; the sample-data mode means no real health data needs to appear)_
+<p align="center"><img src="docs/dashboard.png" alt="The dashboard: KPI tiles, weekly insights, running and strength sections, nightly sleep stages, daily exercise, calories, strain and recovery" width="900"></p>
+<p align="center"><sub>Shown with generated sample data (<code>scripts/seed_demo.py</code>), not real health data.</sub></p>
 
 ## What it does
 
