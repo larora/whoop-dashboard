@@ -7,6 +7,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.responses import JSONResponse
 
 from . import db, payload
+from .weekly import goal_progress
 from .config import Settings
 
 
@@ -48,13 +49,30 @@ def build_mcp(settings: Settings, runner) -> FastMCP:
             con.close()
         return rows[-days:] if days > 0 else rows
 
+    def full_payload() -> dict:
+        con = db.connect(settings.db_path)
+        try:
+            return payload.build_payload(con, settings)
+        finally:
+            con.close()
+
     @mcp.tool()
     def get_summary(days: int = 30) -> dict:
-        """Averages and green/yellow/red day counts over the last N days, plus the most recent day's numbers."""
+        """Averages (recovery, HRV, RHR, sleep incl. naps, in-bed, strain, kcal) and green/yellow/red day counts
+        over the last N days, the most recent day's numbers, and this week's progress against training goals."""
         rows = days_window(days)
         summary = payload.summarize(rows)
         summary["latest"] = rows[-1] if rows else None
+        p = full_payload()
+        summary["this_week"] = goal_progress(p["weeks"], p["goals"])
+        summary["vo2max"] = p["vo2max"][-1] if p["vo2max"] else None
         return summary
+
+    @mcp.tool()
+    def get_weekly(weeks: int = 8) -> list[dict]:
+        """Per-week rows (Monday start): kcal, avg strain, avg sleep/in-bed/awake/nap hours per night,
+        hours exercised by category, run count/km/longest run, strength sessions. Last N weeks."""
+        return full_payload()["weeks"][-weeks:]
 
     @mcp.tool()
     def get_daily(start: str | None = None, end: str | None = None, days: int = 30) -> list[dict]:
@@ -68,16 +86,28 @@ def build_mcp(settings: Settings, runner) -> FastMCP:
 
     @mcp.tool()
     def get_workouts(days: int = 30, sport: str | None = None) -> list[dict]:
-        """Workouts in the last N days: sport, duration (min), strain, avg/max HR, km, HR-zone minutes [0-5]."""
+        """Workouts in the last N days: sport, category (run/strength/walk/other), duration (min), strain,
+        avg/max HR, kcal, km, pace (min/km), HR-zone minutes [0-5]. `sport` filters by name or category."""
         cutoff = (date.today() - timedelta(days=days)).isoformat()
         con = db.connect(settings.db_path)
         try:
-            rows = [w for w in payload.build_workouts(con) if w["d"] >= cutoff]
+            rows = [w for w in payload.build_workouts(con, settings) if w["d"] >= cutoff]
         finally:
             con.close()
         if sport:
-            rows = [w for w in rows if sport.lower() in w["sport"].lower()]
+            rows = [w for w in rows if sport.lower() in w["sport"].lower() or sport.lower() == w["cat"]]
         return rows
+
+    @mcp.tool()
+    def set_vo2max(value: float, date_iso: str | None = None) -> dict:
+        """Record a VO2 max reading from the WHOOP app (the API doesn't expose it). Defaults to today."""
+        d = date_iso or payload.today_local(settings).isoformat()
+        con = db.connect(settings.db_path)
+        try:
+            db.set_metric(con, "vo2max", d, value)
+            return {"vo2max": db.get_metric_history(con, "vo2max")}
+        finally:
+            con.close()
 
     @mcp.tool()
     def get_sync_status() -> dict:

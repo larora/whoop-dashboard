@@ -19,6 +19,12 @@ class Settings:
     tz: str
     initial_days: int
     mcp_token: str | None  # MCP endpoint is disabled when unset
+    goal_runs: int
+    goal_strength: int
+    goal_run_km: float
+    run_sports: tuple[str, ...]
+    strength_sports: tuple[str, ...]
+    walk_sports: tuple[str, ...]
 
     @property
     def db_path(self) -> Path:
@@ -28,6 +34,10 @@ class Settings:
     def cookie_secure(self) -> bool:
         # Local dev uses http://localhost; everything else must be HTTPS.
         return self.whoop_redirect_uri.startswith("https://")
+
+
+def _csv(value: str) -> tuple[str, ...]:
+    return tuple(v.strip().lower().replace("_", " ") for v in value.split(",") if v.strip())
 
 
 def load_settings(env: dict | None = None) -> Settings:
@@ -49,4 +59,11 @@ def load_settings(env: dict | None = None) -> Settings:
         tz=env.get("TZ", "Asia/Kolkata"),
         initial_days=int(env.get("INITIAL_DAYS", "365")),
         mcp_token=env.get("MCP_TOKEN") or None,
+        goal_runs=int(env.get("GOAL_RUNS", "4")),
+        goal_strength=int(env.get("GOAL_STRENGTH", "3")),
+        goal_run_km=float(env.get("GOAL_RUN_KM", "20")),
+        # WHOOP sport names as they appear in the API (underscores or spaces both match).
+        run_sports=_csv(env.get("RUN_SPORTS", "running,treadmill,trail running,track running")),
+        strength_sports=_csv(env.get("STRENGTH_SPORTS", "weightlifting,strength trainer,strength workout,functional fitness,powerlifting,crossfit")),
+        walk_sports=_csv(env.get("WALK_SPORTS", "walking,hiking")),
     )

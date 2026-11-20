@@ -7,8 +7,10 @@ from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import db, payload
@@ -20,6 +22,11 @@ from .whoop import SyncRunner, WhoopClient, WhoopError
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+class MetricIn(BaseModel):
+    value: float = Field(gt=0, lt=200)
+    date: str | None = None  # ISO date; defaults to today
 
 
 def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
@@ -41,6 +48,7 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
         scheduler.shutdown(wait=False)
 
     app = FastAPI(title="WHOOP dashboard", docs_url=None, redoc_url=None, lifespan=lifespan)
+    app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")  # JS only, no data
     app.state.settings, app.state.sessions, app.state.runner = settings, sessions, runner
     require_login = Depends(sessions.require)
 
@@ -88,12 +96,27 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
     def api_data():
         con = connection()
         try:
-            data = payload.build_payload(con)
+            data = payload.build_payload(con, settings)
         finally:
             con.close()
         data["sync_running"] = runner.running
         data["sync_error"] = runner.last_error
         return JSONResponse(data)
+
+    @app.post("/api/metrics/vo2max", dependencies=[require_login])
+    def set_vo2max(body: MetricIn):
+        d = body.date or payload.today_local(settings).isoformat()
+        try:
+            datetime.fromisoformat(d)
+        except ValueError:
+            raise HTTPException(400, "date must be YYYY-MM-DD")
+        con = connection()
+        try:
+            db.set_metric(con, "vo2max", d, body.value)
+            history = db.get_metric_history(con, "vo2max")
+        finally:
+            con.close()
+        return {"vo2max": history}
 
     @app.post("/sync", dependencies=[require_login], status_code=202)
     def sync_now():

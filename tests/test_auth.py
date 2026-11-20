@@ -13,7 +13,7 @@ def test_login_sets_cookie_and_grants_access(client):
     r = login(client)
     assert r.status_code == 303 and r.headers["location"] == "/"
     assert client.get("/api/data").status_code == 200
-    assert "Connect WHOOP" in client.get("/").text  # not connected yet
+    assert 'id="syncBtn"' in client.get("/").text  # dashboard shell renders once logged in
 
 
 def test_lockout_after_five_failures(client):

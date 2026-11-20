@@ -6,6 +6,8 @@ from pathlib import Path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS manual_metrics (
+    metric TEXT NOT NULL, d TEXT NOT NULL, value REAL NOT NULL, PRIMARY KEY (metric, d));
 CREATE TABLE IF NOT EXISTS oauth_tokens (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     access_token TEXT NOT NULL, refresh_token TEXT, expires_at REAL NOT NULL, scope TEXT);
@@ -97,3 +99,15 @@ def upsert(con, table: str, pk: str, rows: list[dict]) -> int:
 
 def table_counts(con) -> dict:
     return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("cycles", "recovery", "sleep", "workouts")}
+
+
+# --------------------------------------------------------- manual metrics ---
+def set_metric(con, metric: str, d: str, value: float):
+    """Values the WHOOP API doesn't expose (e.g. VO2 max) that the user types in from the app."""
+    con.execute("INSERT OR REPLACE INTO manual_metrics (metric, d, value) VALUES (?, ?, ?)", (metric, d, value))
+    con.commit()
+
+
+def get_metric_history(con, metric: str) -> list[dict]:
+    return [{"d": r["d"], "v": r["value"]} for r in
+            con.execute("SELECT d, value FROM manual_metrics WHERE metric=? ORDER BY d", (metric,))]

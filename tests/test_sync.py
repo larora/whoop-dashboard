@@ -79,4 +79,7 @@ def test_api_data_shape_after_sync(client, settings, whoop):
     assert len(data["days"]) == 50
     day = data["days"][0]
     assert day["rec"] == 50 and day["sleep"] == 6.5 and day["strain"] == 10.0
-    assert data["workouts"][0]["sport"] == "running" and data["workouts"][0]["min"] == 60
+    w = data["workouts"][0]
+    assert w["sport"] == "running" and w["cat"] == "run" and w["min"] == 60 and w["km"] == 8.0 and w["pace_str"] == "7:30"
+    assert data["goals"] == {"runs": 4, "strength": 3, "run_km": 20.0} and data["vo2max"] == []
+    assert data["weeks"] and {"w", "runs", "run_km", "sleep", "in_bed", "kcal", "current"} <= set(data["weeks"][0])
