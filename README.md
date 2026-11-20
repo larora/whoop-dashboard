@@ -9,9 +9,41 @@ Built as a side project to learn three things end to end: working with a real OA
 ## What it does
 
 - **Daily sync.** At 9:00 every morning the app pulls recovery, sleep, strain and workouts from the WHOOP API into a local SQLite database. A **Sync now** button does the same on demand.
-- **Dashboard.** Recovery, HRV and resting heart rate trends, sleep stages against sleep need, daily strain, how strain affects next-day recovery, recovery by weekday, sleep quality, and a workouts table. Range selector from 30 days to all time. Plus a short list of auto-generated observations from the data ("7-day HRV is 8% below your 30-day baseline").
-- **Ask Claude about it.** An MCP endpoint with five tools: summary over N days, per-day rows, workouts, sync status, and trigger a sync. Connect it to Claude (desktop, web or Claude Code) and the data becomes something you can converse with.
+- **Dashboard.** A single page built around two questions: *am I sleeping enough?* and *am I training the way I planned?* Details in [What the dashboard shows](#what-the-dashboard-shows) below.
+- **Ask Claude about it.** An MCP endpoint with seven tools: summary over N days, weekly rows, per-day rows, workouts, VO2 max entry, sync status, and trigger a sync. Connect it to Claude (desktop, web or Claude Code) and the data becomes something you can converse with.
 - **Private by design.** Single-password login, signed session cookie, lockout after repeated failures. The MCP endpoint uses its own bearer token. The only external host the app ever contacts is `api.prod.whoop.com`. Nothing is sent anywhere else.
+
+## What the dashboard shows
+
+The WHOOP app is excellent at today: today's recovery, last night's sleep, this workout. What I wanted was the week. How much have I actually slept, naps included? Have I done the runs and strength sessions I said I would? Is my pace improving? This dashboard reorganises the same data around those questions, with exact numbers rather than rings and scores, so that one screen answers them.
+
+**At the top: six tiles for where you stand right now**
+
+| Tile | What it shows |
+|---|---|
+| Recovery | this morning's score, colored green/yellow/red, vs your 30-day average |
+| HRV | this morning's HRV in ms, vs 30-day average |
+| VO2 max | your latest value with the change since the previous entry (typed in from the app; the API doesn't expose it) |
+| Sleep | last night's total hours asleep, naps included, against your sleep need |
+| Day strain | yesterday's strain, vs 30-day average |
+| Exercised this week | hours of training since Monday, walking excluded, vs last week |
+
+**This week: plain-language insights.** Average sleep per night over the last 7 nights and how far from your need; time in bed vs awake; runs done out of your weekly goal, strength sessions out of goal, kilometres run out of your target and what's left; total exercise vs last week; how many recent weeks hit both session goals; whether your last four runs were faster or slower than the eight before.
+
+**Running.** Built for a training block (mine is a half marathon). Kilometres this week against a target, runs this week against a goal, average pace over your last four runs, longest recent run, VO2 max. A weekly-distance chart with the goal line, a pace-per-run chart with every run dated, and a table of the last ten runs: distance, duration, pace, strain, average and max heart rate, calories, and exact minutes spent in each heart-rate zone.
+
+**Strength.** Sessions this week against a goal, hours this week, average session length and strain, and the last ten sessions with the same per-zone minutes. (WHOOP's API doesn't carry sets, reps or weights, so this is time, effort and heart rate.)
+
+**Day by day, for any 7-, 30- or 90-day window.** Step backwards and forwards through your history with the ‹ › buttons.
+
+- **Sleep per night.** Two bars per night: hours asleep, stacked into light, deep and REM, next to hours in bed. The gap between them is time awake. A dashed line marks your sleep need. Every segment is labeled, and a table underneath gives each night in hours and minutes with each stage as a percentage of total sleep, nap time, and minutes over or under need.
+- **Hours exercised per day**, stacked by running, strength and other. Walking is excluded on purpose.
+- **Calories burned per day**, **day strain** and **recovery** as daily bars with values on top.
+- **Recent workouts**: everything in the window, with calories, distance, pace where it applies, and heart-rate zone minutes.
+
+**Goals are yours to set.** Weekly run count, strength count and kilometres are environment variables, as are which WHOOP activity names count as running, strength or walking.
+
+**What's deliberately not here.** No HRV-vs-resting-heart-rate chart, no strain-vs-next-day-recovery scatter, no recovery-by-weekday. The app shows those well enough already. The point of this page is the week's sleep and training, in numbers.
 
 ## How it's built
 
