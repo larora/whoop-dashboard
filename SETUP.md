@@ -14,6 +14,7 @@ The app talks to WHOOP through their official API, which requires your own free 
 2. Create a **Team** (any name), then click **Create App**.
 3. Fill in:
    - **Name:** anything, e.g. "My dashboard"
+   - **Privacy policy URL:** `https://github.com/<your-github-username>/whoop-dashboard/blob/main/PRIVACY.md` (the app is only for you, but the form requires a URL)
    - **Scopes:** tick all of `offline`, `read:recovery`, `read:cycles`, `read:sleep`, `read:workout`, `read:body_measurement`
    - **Redirect URLs:** add `http://localhost:8080/auth/whoop/callback` now. When you host it later, you'll come back and add a second one for your real address.
 4. Save, then copy the **Client ID** and **Client Secret**. Treat the secret like a password.

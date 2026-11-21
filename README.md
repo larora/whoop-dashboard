@@ -116,7 +116,7 @@ SETUP.md               step-by-step setup and hosting guide
 
 ## Privacy note
 
-This app handles personal health data. It's designed for one person running their own instance: your data stays in your database, on your server, behind your password. Please don't point a shared deployment at other people's WHOOP accounts without thinking through consent and access.
+See [PRIVACY.md](PRIVACY.md) for the short version suitable for the WHOOP developer form. This app handles personal health data. It's designed for one person running their own instance: your data stays in your database, on your server, behind your password. Please don't point a shared deployment at other people's WHOOP accounts without thinking through consent and access.
 
 ---
 
