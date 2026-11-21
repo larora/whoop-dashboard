@@ -78,6 +78,7 @@ def build_days(con) -> list[dict]:
             "eff": r1(main["efficiency"], 0) if main else None, "cons": r1(main["consistency"], 0) if main else None,
             "resp": r1(main["resp_rate"]) if main else None, "dist": main["disturbances"] if main else None,
             "bed": local_dt(main["start"], main["tz"] or "+00:00").strftime("%H:%M") if main and main["start"] else None,
+            "wake": local_dt(main["end"], main["tz"] or "+00:00").strftime("%H:%M") if main and main["end"] else None,
         }
         row.update(_sleep_totals(sleeps))
         days[day] = row

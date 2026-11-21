@@ -31,10 +31,10 @@ function setNav(days, all) {
 function sleepTable(days) {
   const rows = [...days].reverse().filter(d => d.sleep != null);
   // d.sleep already includes naps; night-only sleep is the difference.
-  return `<tr><th>Night of</th><th>Slept at night</th><th>Nap</th><th>Total slept</th><th>In bed</th><th>Awake</th><th>Light</th><th>Deep</th><th>REM</th><th>Bedtime</th></tr>` +
-    rows.map(d => `<tr><td>${dowLabel(d.d)}</td><td>${hm(d.sleep - (d.nap || 0))}</td><td>${d.nap ? Math.round(d.nap * 60) + " min" : "–"}</td><td><b>${hm(d.sleep)}</b></td><td>${hm(d.in_bed)}</td><td>${Math.round((d.awake || 0) * 60)} min <span class="sub">(${pct(d.awake, d.in_bed)})</span></td>
+  return `<tr><th>Night of</th><th>Total slept</th><th>Slept at night</th><th>In bed</th><th>Awake</th><th>Light</th><th>Deep</th><th>REM</th><th>Nap</th><th>Bedtime</th><th>Woke up</th></tr>` +
+    rows.map(d => `<tr><td>${dowLabel(d.d)}</td><td><b>${hm(d.sleep)}</b></td><td>${hm(d.sleep - (d.nap || 0))}</td><td>${hm(d.in_bed)}</td><td>${Math.round((d.awake || 0) * 60)} min <span class="sub">(${pct(d.awake, d.in_bed)})</span></td>
       <td>${hm(d.light)} <span class="sub">(${pct(d.light, d.sleep)})</span></td><td>${hm(d.sws)} <span class="sub">(${pct(d.sws, d.sleep)})</span></td><td>${hm(d.rem)} <span class="sub">(${pct(d.rem, d.sleep)})</span></td>
-      <td>${d.bed || "–"}</td></tr>`).join("");
+      <td>${d.nap ? Math.round(d.nap * 60) + " min" : "–"}</td><td>${d.bed || "–"}</td><td>${d.wake || "–"}</td></tr>`).join("");
 }
 
 function render() {
