@@ -42,7 +42,7 @@ function render() {
   if (!DATA) { root.innerHTML = `<div class="card empty">Loading…</div>`; return; }
   if (!DATA.whoop_connected) { root.innerHTML = `<div class="card empty"><p>Connect your WHOOP account to start syncing.</p><a class="btn primary" href="/auth/whoop">Connect WHOOP</a></div>`; return; }
   if (!DATA.days.length) { root.innerHTML = `<div class="card empty">${DATA.sync_running ? "First sync in progress…" : "No data yet. Click <b>Sync now</b>."}${DATA.sync_error ? `<div class="err">${DATA.sync_error}</div>` : ""}</div>`; return; }
-  $("#gen").innerHTML = `${DATA.days.length} days of history · ${ago(DATA.last_sync)}${DATA.sync_error ? ` · <span class="err">last sync failed: ${DATA.sync_error}</span>` : ""}`;
+  $("#gen").innerHTML = `${DATA.days.length} days of history · ${ago(DATA.last_sync)}${DATA.strava_pending ? ` · Strava: ${DATA.strava_pending} activit${DATA.strava_pending === 1 ? "y" : "ies"} still fetching detail (rate-limited, continues automatically)` : ""}${DATA.sync_error ? ` · <span class="err">last sync failed: ${DATA.sync_error}</span>` : ""}`;
 
   const all = DATA.days, days = windowDays(all), L = days.map(d => d.d), col = k => days.map(d => d[k]);
   setNav(days, all);
@@ -89,6 +89,7 @@ function render() {
     <div class="card full"><h2>${icon("heart")}Recovery</h2><div class="note">Daily score with 7-day average</div><div class="chart" id="cRec"></div>
       <div class="legend"><span><i style="background:var(--green)"></i>67–100</span><span><i style="background:var(--yellow)"></i>34–66</span><span><i style="background:var(--red)"></i>0–33</span><span><i style="background:var(--ink);height:2px"></i>7-day avg</span></div></div>
     <div class="card full"><h2>${icon("list")}Recent workouts</h2><div class="tbl"><table id="wk"></table></div></div>
+    <div class="card full"><h2>${icon("dumbbell")}Strength sessions in detail</h2><div class="note">Exercises, sets, reps and weights as logged in the WHOOP Strength Trainer, read from the Strava activity description</div><div id="strDetail"></div></div>
   </div>`;
 
   const dtip = (i, body) => `<b>${dowLabel(L[i])}</b><br>${body}`;
@@ -110,12 +111,12 @@ function render() {
   tsChart($("#cRec"), L, { labelFn: dLabel, labelEvery: every, topLabel: dense ? i => fmt(days[i].rec) : null, bars: [{ values: col("rec") }], barColor: v => recColor(v), lines: [{ values: rolling(col("rec"), 7), color: css("--ink") }], yMin: 0, yMax: 100,
     tip: i => dtip(i, `Recovery <b>${fmt(days[i].rec)}%</b> · HRV ${fmt(days[i].hrv)} ms · RHR ${fmt(days[i].rhr)}`) });
 
-  renderRunning(weeks, cur, prev); renderStrength(cur, prev); renderInsights(days, DATA.weeks, cur, prev);
+  renderRunning(weeks, cur, prev); renderStrength(cur, prev); renderStrengthDetail(); renderInsights(days, DATA.weeks, cur, prev);
 
   const wks = DATA.workouts.filter(w => !RANGE || (w.d >= L[0] && w.d <= L[L.length - 1])).slice(0, 40);
-  $("#wk").innerHTML = `<tr><th>Date</th><th>Activity</th><th>Duration</th><th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>Distance</th><th>Pace</th><th>HR zones (min)</th></tr>` +
-    (wks.length ? wks.map(w => `<tr><td>${dayLabel(w.d)} ${w.t}</td><td style="text-transform:capitalize">${w.sport}</td><td>${fmt(w.min)} min</td><td>${fmt(w.strain, 1)}</td><td>${fmt(w.avg_hr)} / ${fmt(w.max_hr)}</td><td>${fmt(w.kcal)}</td><td>${w.km ? w.km + " km" : "–"}</td><td>${w.pace_str ? w.pace_str + " /km" : "–"}</td><td>${zones(w.zones)}</td></tr>`).join("")
-      : `<tr><td colspan="9" class="sub">No workouts in this range.</td></tr>`);
+  $("#wk").innerHTML = `<tr><th>Date</th>${DATA.strava_connected ? "<th>Source</th>" : ""}<th>Activity</th><th>Duration</th><th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>Distance</th><th>Pace</th><th>HR zones (min)</th></tr>` +
+    (wks.length ? wks.map(w => `<tr><td>${dayLabel(w.d)} ${w.t}</td>${DATA.strava_connected ? `<td>${srcTag(w)}</td>` : ""}<td style="text-transform:capitalize">${w.sport}</td><td>${fmt(w.min)} min</td><td>${fmt(w.strain, 1)}</td><td>${fmt(w.avg_hr)} / ${fmt(w.max_hr)}</td><td>${fmt(w.kcal)}</td><td>${w.km ? w.km + " km" : "–"}</td><td>${w.pace_str ? w.pace_str + " /km" : "–"}</td><td>${zones(w.zones)}</td></tr>`).join("")
+      : `<tr><td colspan="10" class="sub">No workouts in this range.</td></tr>`);
 
   $("#vo2Btn").onclick = () => { const f = $("#vo2Form"); f.hidden = !f.hidden; if (!f.hidden) f.value.focus(); };
   $("#vo2Form").onsubmit = async e => { e.preventDefault();

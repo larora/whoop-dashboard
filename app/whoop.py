@@ -188,6 +188,7 @@ class SyncRunner:
         self._lock = threading.Lock()
         self.running = False
         self.last_error: str | None = None
+        self.strava_retry_at: float | None = None  # when to fetch the next batch of Strava details
 
     def start_background(self) -> bool:
         """Kick off a sync thread; returns False if one is already running."""
@@ -196,7 +197,12 @@ class SyncRunner:
         threading.Thread(target=self.run, daemon=True, name="whoop-sync").start()
         return True
 
-    def run(self) -> dict | None:
+    def run_pending_strava(self):
+        """Scheduler tick (every few minutes): continue fetching Strava details once the rate-limit window passed."""
+        if self.strava_retry_at and time.time() >= self.strava_retry_at and not self.running:
+            self.run(strava_details_only=True)
+
+    def run(self, strava_details_only: bool = False) -> dict | None:
         if not self._lock.acquire(blocking=False):
             return None
         self.running = True
@@ -204,7 +210,7 @@ class SyncRunner:
         con = db.connect(self.settings.db_path)
         counts, errors = {}, []
         try:
-            if db.whoop_connected(con):
+            if db.whoop_connected(con) and not strava_details_only:
                 client = WhoopClient(self.settings, con, self.transport)
                 try:
                     start_iso = self._window_start(con)
@@ -220,7 +226,9 @@ class SyncRunner:
             if self.settings.strava_enabled and db.provider_connected(con, "strava"):
                 from .strava import StravaError, sync_strava  # local import keeps whoop.py importable without strava
                 try:
-                    counts.update(sync_strava(con, self.settings, self.strava_transport))
+                    counts.update(sync_strava(con, self.settings, self.strava_transport, details_only=strava_details_only))
+                    # More details to fetch? Come back after Strava's 15-minute window (sooner if we weren't limited).
+                    self.strava_retry_at = (time.time() + (16 * 60 if counts.get("strava_rate_limited") else 60)) if counts.get("strava_pending") else None
                 except StravaError as e:
                     errors.append(f"Strava: {e}")
             self.last_error = "; ".join(errors) or None

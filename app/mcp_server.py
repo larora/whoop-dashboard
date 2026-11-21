@@ -122,6 +122,23 @@ def build_mcp(settings: Settings, runner) -> FastMCP:
         return [w for w in full_payload()["workouts"] if w["d"] == date_iso and w["cat"] == "run"]
 
     @mcp.tool()
+    def get_strength_detail(date_iso: str | None = None, last: int = 5) -> list[dict]:
+        """Strength sessions with the exercise list parsed from the Strava description (exercise, sets, reps,
+        weight kg, volume), plus unparsed notes. One date (YYYY-MM-DD) or the last N sessions."""
+        rows = [w for w in full_payload()["workouts"] if w["cat"] == "strength" and (not date_iso or w["d"] == date_iso)]
+        return rows[:last] if not date_iso else rows
+
+    @mcp.tool()
+    def get_exercise_history(exercise: str, last: int = 10) -> list[dict]:
+        """Every logged instance of one exercise (name match, case-insensitive) with date, sets, reps, weight."""
+        hits = []
+        for w in full_payload()["workouts"]:
+            for e in (w.get("strava") or {}).get("exercises", []):
+                if exercise.lower() in e["exercise"].lower():
+                    hits.append({"d": w["d"], **e})
+        return hits[:last]
+
+    @mcp.tool()
     def get_personal_bests() -> list[dict]:
         """Fastest 1k / 1 mile / 5k / 10k / half-marathon etc. from Strava best efforts, with the date of each."""
         return full_payload()["prs"]

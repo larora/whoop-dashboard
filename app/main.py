@@ -206,6 +206,8 @@ def start_scheduler(settings: Settings, runner: SyncRunner) -> BackgroundSchedul
     scheduler = BackgroundScheduler(timezone=settings.tz)
     scheduler.add_job(runner.run, CronTrigger(hour=settings.sync_hour, minute=settings.sync_minute, timezone=settings.tz),
                       id="daily-sync", coalesce=True, max_instances=1)
+    if settings.strava_enabled:  # picks up Strava details left over after a rate-limited pass
+        scheduler.add_job(runner.run_pending_strava, "interval", minutes=2, id="strava-pending", max_instances=1)
     scheduler.start()
     log.info("scheduled daily sync at %02d:%02d %s", settings.sync_hour, settings.sync_minute, settings.tz)
     # Catch up if the last sync is stale (e.g. the machine was down at sync time).

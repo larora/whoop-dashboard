@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from . import db
 from .config import Settings
-from .strava_payload import personal_bests, strava_by_workout, strava_status, unmatched_runs
+from .strava_payload import personal_bests, strava_by_workout, strava_only_workouts, strava_status
 from .weekly import build_weeks
 
 
@@ -119,8 +119,13 @@ def build_workouts(con, settings: Settings, limit=600) -> list[dict]:
             "kcal": r1(w["kilojoule"] / 4.184, 0) if w["kilojoule"] else None,
             "km": km, "pace": pace, "pace_str": pace_str(pace),
             "zones": [round((w[f"zone{i}_ms"] or 0) / 60000) for i in range(6)],
-            "strava": strava.get(w["id"]),  # splits, elevation, cadence, best efforts when matched
+            "sources": ["WHOOP"] + (["Strava"] if w["id"] in strava else []),
+            "strava": strava.get(w["id"]),  # splits, elevation, cadence, exercises when matched
+            "start": w["start"],
         })
+    # Activities only Strava knows about (e.g. logged on a watch) become rows too, so weekly totals include them.
+    out.extend(strava_only_workouts(con, settings))
+    out.sort(key=lambda x: x["start"] or "", reverse=True)
     return out
 
 
@@ -131,7 +136,7 @@ def build_payload(con, settings: Settings) -> dict:
     return {"generated": datetime.now().strftime("%Y-%m-%d %H:%M"), "today": today.isoformat(),
             "days": days, "workouts": workouts, "weeks": build_weeks(days, workouts, today),
             "vo2max": db.get_metric_history(con, "vo2max"),
-            "prs": personal_bests(con), "unmatched_runs": unmatched_runs(con), **strava_status(con, settings),
+            "prs": personal_bests(con), **strava_status(con, settings),
             "goals": {"runs": settings.goal_runs, "strength": settings.goal_strength, "run_km": settings.goal_run_km},
             "last_sync": db.get_meta(con, "last_sync"), "whoop_connected": db.whoop_connected(con)}
 

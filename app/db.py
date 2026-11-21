@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS strava_activities (
 CREATE TABLE IF NOT EXISTS strava_splits (
     activity_id INTEGER, split INTEGER, distance_m REAL, elapsed_s INTEGER, moving_s INTEGER,
     elev_diff_m REAL, avg_speed REAL, avg_hr REAL, PRIMARY KEY (activity_id, split));
+CREATE TABLE IF NOT EXISTS strava_exercises (
+    activity_id INTEGER, ord INTEGER, exercise TEXT, sets INTEGER, reps INTEGER, reps_list TEXT,
+    weight_kg REAL, seconds INTEGER, volume_kg REAL, raw TEXT, PRIMARY KEY (activity_id, ord));
 CREATE TABLE IF NOT EXISTS strava_best_efforts (
     activity_id INTEGER, name TEXT, distance_m REAL, elapsed_s INTEGER, start_date TEXT, pr_rank INTEGER,
     PRIMARY KEY (activity_id, name));
@@ -49,7 +52,16 @@ def connect(db_path: Path) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(SCHEMA)
+    _migrate(con)
     return con
+
+
+def _migrate(con):
+    """Columns added after the first release; CREATE IF NOT EXISTS won't add them to existing tables."""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(strava_activities)")}
+    if "description" not in cols:
+        con.execute("ALTER TABLE strava_activities ADD COLUMN description TEXT")
+        con.commit()
 
 
 # ------------------------------------------------------------------- meta ---

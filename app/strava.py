@@ -15,6 +15,7 @@ import httpx
 
 from . import db
 from .config import Settings
+from .exercises import parse_description
 
 log = logging.getLogger("strava")
 
@@ -23,8 +24,12 @@ TOKEN_URL = "https://www.strava.com/oauth/token"
 API = "https://www.strava.com/api/v3"
 SCOPE = "activity:read_all"
 RUN_TYPES = {"Run", "TrailRun", "VirtualRun"}
+STRENGTH_TYPES = {"WeightTraining", "Workout", "Crossfit", "HighIntensityIntervalTraining"}
+DETAIL_TYPES = RUN_TYPES | STRENGTH_TYPES  # activities worth a detail call (splits / exercise description)
 MATCH_WINDOW_S = 300  # WHOOP and Strava start times for the same run are usually within a minute
-DETAIL_BUDGET = 150   # detail calls per sync; Strava allows 200 requests per 15 min
+# Strava allows 100 requests per 15 min (200 once an app is approved) and 1000/day. Stay under the lower
+# limit per pass; whatever is left is fetched on the next pass (every 15 min while anything is pending).
+DETAIL_BUDGET = 80
 
 
 class StravaError(Exception):
@@ -33,6 +38,10 @@ class StravaError(Exception):
 
 class StravaNotConnected(StravaError):
     pass
+
+
+class StravaRateLimited(StravaError):
+    """429 from Strava: stop this pass, keep what was stored, try again later."""
 
 
 def _parse(iso: str) -> datetime:
@@ -85,8 +94,7 @@ class StravaClient:
                     continue
                 raise StravaError(f"Network error: {e}") from None
             if r.status_code == 429:
-                time.sleep(min(60 * (attempt + 1), 180))  # 15-minute window; back off hard
-                continue
+                raise StravaRateLimited("Strava rate limit reached (15-minute window)")
             if r.status_code >= 500:
                 time.sleep(2 ** attempt)
                 continue
@@ -146,6 +154,13 @@ def _store_activity(con, a: dict):
 
 def _store_detail(con, d: dict):
     aid = d["id"]
+    # WHOOP's Strength Trainer writes the exercise list into the description; keep the text and a parsed copy.
+    con.execute("UPDATE strava_activities SET description=? WHERE id=?", (d.get("description"), aid))
+    exercises, _notes = parse_description(d.get("description"))
+    con.execute("DELETE FROM strava_exercises WHERE activity_id=?", (aid,))
+    con.executemany("INSERT INTO strava_exercises VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [(aid, i, e["exercise"], e["sets"], e["reps"], e["reps_list"], e["weight_kg"], e["seconds"], e["volume_kg"], e["raw"])
+                     for i, e in enumerate(exercises)])
     con.execute("DELETE FROM strava_splits WHERE activity_id=?", (aid,))
     con.executemany("INSERT INTO strava_splits VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     [(aid, s.get("split"), s.get("distance"), s.get("elapsed_time"), s.get("moving_time"),
@@ -158,23 +173,40 @@ def _store_detail(con, d: dict):
     con.execute("UPDATE strava_activities SET detail_fetched=1 WHERE id=?", (aid,))
 
 
-def sync_strava(con, settings: Settings, transport=None) -> dict:
-    """Pull activities since the last Strava sync (minus 7 days), then details for runs that lack them."""
+def pending_details(con) -> int:
+    marks = ", ".join("?" for _ in DETAIL_TYPES)
+    return con.execute(f"SELECT COUNT(*) FROM strava_activities WHERE detail_fetched=0 AND sport_type IN ({marks})", tuple(DETAIL_TYPES)).fetchone()[0]
+
+
+def sync_strava(con, settings: Settings, transport=None, details_only: bool = False) -> dict:
+    """Pull activities since the last Strava sync (minus 7 days), then details for up to DETAIL_BUDGET
+    runs/strength sessions that lack them. A 429 ends the pass early without being an error; the caller
+    re-runs with details_only=True after the rate-limit window."""
     client = StravaClient(settings, con, transport)
+    fetched, listed, limited = 0, 0, False
     try:
-        last = db.get_meta(con, "strava_last_sync")
-        after = (datetime.fromisoformat(last) - timedelta(days=7)) if last else datetime.now(timezone.utc) - timedelta(days=settings.initial_days)
-        acts = client.list_activities(after)
-        for a in acts:
-            _store_activity(con, a)
-        con.commit()
-        pending = con.execute("SELECT id FROM strava_activities WHERE detail_fetched=0 AND sport_type IN (?, ?, ?) ORDER BY start DESC LIMIT ?",
-                              (*RUN_TYPES, DETAIL_BUDGET)).fetchall()
-        for row in pending:
-            _store_detail(con, client.activity_detail(row["id"]))
+        if not details_only:
+            last = db.get_meta(con, "strava_last_sync")
+            after = (datetime.fromisoformat(last) - timedelta(days=7)) if last else datetime.now(timezone.utc) - timedelta(days=settings.initial_days)
+            acts = client.list_activities(after)
+            for a in acts:
+                _store_activity(con, a)
             con.commit()
-        db.set_meta(con, "strava_last_sync", datetime.now(timezone.utc).isoformat())
-        log.info("strava sync: %d activities listed, %d run details fetched", len(acts), len(pending))
-        return {"strava_activities": len(acts), "strava_details": len(pending)}
+            listed = len(acts)
+            db.set_meta(con, "strava_last_sync", datetime.now(timezone.utc).isoformat())
+        marks = ", ".join("?" for _ in DETAIL_TYPES)
+        rows = con.execute(f"SELECT id FROM strava_activities WHERE detail_fetched=0 AND sport_type IN ({marks}) ORDER BY start DESC LIMIT ?",
+                           (*DETAIL_TYPES, DETAIL_BUDGET)).fetchall()
+        for row in rows:
+            try:
+                _store_detail(con, client.activity_detail(row["id"]))
+            except StravaRateLimited:
+                limited = True
+                break
+            con.commit()
+            fetched += 1
+        left = pending_details(con)
+        log.info("strava sync: %d listed, %d details fetched, %d pending%s", listed, fetched, left, ", rate limited" if limited else "")
+        return {"strava_activities": listed, "strava_details": fetched, "strava_pending": left, "strava_rate_limited": limited}
     finally:
         client.close()
