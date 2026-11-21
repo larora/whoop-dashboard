@@ -121,13 +121,27 @@ fly deploy
 
 Add `https://<pick-a-name>.fly.dev/auth/whoop/callback` to your WHOOP app, open the URL, sign in, Connect WHOOP. `fly.toml` already keeps one machine always on (the scheduler needs it) and mounts the volume at `/data`. Timezone and sync time live in its `[env]` block.
 
+**Deploy on push.** If the repo is on GitHub, `fly launch` adds `.github/workflows/fly-deploy.yml` and stores a deploy token in the repo's Actions secrets, so every push to `main` redeploys. Nothing to configure.
+
+**Custom domain (optional).** To serve it at e.g. `health.yourdomain.com`:
+
+```bash
+fly certs add health.yourdomain.com
+fly secrets set WHOOP_REDIRECT_URI=https://health.yourdomain.com/auth/whoop/callback
+```
+
+Then at your DNS provider add a **CNAME** record: name `health`, value `<pick-a-name>.fly.dev`. Fly issues the certificate once it sees the record (`fly certs check health.yourdomain.com`). Add the new callback URL to your WHOOP app as well; the `fly.dev` address keeps working alongside.
+
 ### Option D: Railway, Render and similar
 
 They all build the `Dockerfile` directly. You need to: set the same environment variables as secrets, attach a persistent disk and set `DATA_DIR` to its mount path, and make sure the service isn't put to sleep when idle (the daily sync runs inside the app). Health check path: `/healthz`.
 
 ## Step 4: Optional extras
 
-**Let Claude read your data (MCP).** Set `MCP_TOKEN` to a long random string and restart. The MCP server is then at `https://<your address>/mcp`. In Claude.ai or the desktop app, add a custom connector with URL `https://<your address>/mcp/<that token>` (the token goes in the URL because the connector form can't set headers); in Claude Code: `claude mcp add --transport http whoop https://<your address>/mcp --header "Authorization: Bearer <that token>"`. Leave `MCP_TOKEN` empty and the endpoint doesn't exist.
+**Let Claude read your data (MCP).** Set `MCP_TOKEN` to a long random string and restart. The MCP server is then at `https://<your address>/mcp`. Leave `MCP_TOKEN` empty and the endpoint doesn't exist.
+
+- *Claude.ai / desktop app:* Settings → Connectors → Add custom connector. URL `https://<your address>/mcp`, Authentication **No sign-in**, and under Request headers pick the **Authorization** preset with value `Bearer <that token>`. If your form has no header option, use the URL `https://<your address>/mcp/<that token>` with no headers instead.
+- *Claude Code:* `claude mcp add --transport http whoop https://<your address>/mcp --header "Authorization: Bearer <that token>"`
 
 **Training goals and categories.** Defaults shown; override in `.env`:
 

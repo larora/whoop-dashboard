@@ -11,7 +11,7 @@ Built as a side project to learn three things end to end: working with a real OA
 
 - **Daily sync.** At 9:00 every morning the app pulls recovery, sleep, strain and workouts from the WHOOP API into a local SQLite database. A **Sync now** button does the same on demand.
 - **Dashboard.** A single page built around two questions: *am I sleeping enough?* and *am I training the way I planned?* Details in [What the dashboard shows](#what-the-dashboard-shows) below.
-- **Ask Claude about it.** An MCP endpoint with seven tools: summary over N days, weekly rows, per-day rows, workouts, VO2 max entry, sync status, and trigger a sync. Connect it to Claude (desktop, web or Claude Code) and the data becomes something you can converse with.
+- **Ask Claude about it.** An MCP endpoint with seven tools: summary over N days, weekly rows, per-day rows, workouts, VO2 max entry, sync status, and trigger a sync. Connect it to Claude (desktop, web or Claude Code) and the data becomes something you can converse with. Adding it in Claude.ai is a custom connector with the server URL and a bearer token; details in [SETUP.md](SETUP.md#step-4-optional-extras).
 - **Private by design.** Single-password login, signed session cookie, lockout after repeated failures. The MCP endpoint uses its own bearer token. The only external host the app ever contacts is `api.prod.whoop.com`. Nothing is sent anywhere else.
 
 ## What the dashboard shows
