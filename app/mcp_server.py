@@ -116,6 +116,17 @@ def build_mcp(settings: Settings, runner) -> FastMCP:
         return rows
 
     @mcp.tool()
+    def get_run_detail(date_iso: str) -> list[dict]:
+        """Runs on a given date (YYYY-MM-DD) with Strava detail when available: per-km splits (pace, HR,
+        elevation change), total elevation gain, cadence and best efforts within that run."""
+        return [w for w in full_payload()["workouts"] if w["d"] == date_iso and w["cat"] == "run"]
+
+    @mcp.tool()
+    def get_personal_bests() -> list[dict]:
+        """Fastest 1k / 1 mile / 5k / 10k / half-marathon etc. from Strava best efforts, with the date of each."""
+        return full_payload()["prs"]
+
+    @mcp.tool()
     def set_vo2max(value: float, date_iso: str | None = None) -> dict:
         """Record a VO2 max reading from the WHOOP app (the API doesn't expose it). Defaults to today."""
         d = date_iso or payload.today_local(settings).isoformat()
@@ -132,6 +143,7 @@ def build_mcp(settings: Settings, runner) -> FastMCP:
         con = db.connect(settings.db_path)
         try:
             return {"last_sync": db.get_meta(con, "last_sync"), "whoop_connected": db.whoop_connected(con),
+                    "strava_connected": db.provider_connected(con, "strava"), "strava_last_sync": db.get_meta(con, "strava_last_sync"),
                     "sync_running": runner.running, "last_error": runner.last_error, "rows": db.table_counts(con)}
         finally:
             con.close()

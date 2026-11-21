@@ -17,15 +17,38 @@ function renderRunning(weeks, cur, prev) {
     mini("Avg pace, last 4", `${paced.length ? paceFmt(avg(paced.map(r => r.pace))) : "–"}<small> /km</small>`, last ? `last run ${last.pace_str || "–"} /km` : "") +
     mini("Longest recent run", longest ? `${fmt(longest.km, 1)}<small> km</small>` : "–", longest ? `${dayLabel(longest.d)} · ${longest.pace_str || "–"} /km` : "") +
     mini("VO2 max", vo2 ? `${fmt(vo2.v, 1)}<small> ml/kg/min</small>` : "–", vo2 ? `entered ${dayLabel(vo2.d)}` : "from the WHOOP app");
+  const prs = DATA.prs || [], prHost = $("#prTiles");
+  if (!DATA.strava_enabled) prHost.innerHTML = "";
+  else if (!DATA.strava_connected) prHost.innerHTML = `<div class="connect"><span>Connect Strava for per-km splits, elevation and personal bests.</span><a class="btn" href="/auth/strava">Connect Strava</a></div>`;
+  else prHost.innerHTML = `<h3>${icon("sparkle", 12)}Personal bests (Strava)</h3><div class="minis">` +
+    (prs.length ? prs.map(p => mini(p.name, `${p.time}<small> ${p.pace_str ? p.pace_str + " /km" : ""}</small>`, p.d ? dayLabel(p.d) : "")).join("") : mini("No best efforts yet", "–", "appear after the first Strava sync")) + `</div>`;
   const L = weeks.map(w => w.w);
   groupChart($("#cRunKm"), L, { groups: [{ segments: [{ values: weeks.map(w => w.run_km), color: css("--blue") }] }], goal: DATA.goals.run_km,
     topLabel: v => fmt(v, 1), tip: i => `Week of <b>${weekLabel(L[i])}</b><br>${fmt(weeks[i].run_km, 1)} km · ${weeks[i].runs} runs · longest ${fmt(weeks[i].longest_run_km, 1)} km` });
   const pr = runs.filter(r => r.pace && r.km >= 1).slice(0, 20).reverse();
   tsChart($("#cPace"), pr.map(r => r.d), { lines: [{ values: pr.map(r => r.pace), color: css("--teal"), dots: true, area: true }], yFmt: paceFmt, labelEvery: 1, topLabel: i => paceFmt(pr[i].pace),
     tip: i => `<b>${paceFmt(pr[i].pace)} /km</b> · ${fmt(pr[i].km, 1)} km · ${pr[i].min} min · HR ${fmt(pr[i].avg_hr)}` });
-  $("#runTable").innerHTML = `<tr><th>Date</th><th>Distance</th><th>Duration</th><th>Pace</th><th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>HR zones (min)</th></tr>` +
-    (recent.length ? recent.map(r => `<tr><td>${dayLabel(r.d)} ${r.t}</td><td>${r.km ? fmt(r.km, 2) + " km" : "–"}</td><td>${fmt(r.min)} min</td><td>${r.pace_str ? r.pace_str + " /km" : "–"}</td><td>${fmt(r.strain, 1)}</td><td>${fmt(r.avg_hr)} / ${fmt(r.max_hr)}</td><td>${fmt(r.kcal)}</td><td>${zones(r.zones)}</td></tr>`).join("")
-      : `<tr><td colspan="8" class="sub">No runs yet.</td></tr>`);
+  const sv = DATA.strava_connected;
+  $("#runTable").innerHTML = `<tr><th>Date</th><th>Distance</th><th>Duration</th><th>Pace</th>${sv ? "<th>Elev</th><th>Cadence</th>" : ""}<th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>HR zones (min)</th></tr>` +
+    (recent.length ? recent.map((r, i) => { const st = r.strava, has = st && st.splits.length;
+      return `<tr class="${has ? "exp" : ""}" data-i="${i}" title="${has ? "Click for per-km splits" : ""}"><td>${has ? "<span class=\"caret\">▸</span>" : ""}${dayLabel(r.d)} ${r.t}</td><td>${r.km ? fmt(r.km, 2) + " km" : "–"}</td><td>${fmt(r.min)} min</td><td>${r.pace_str ? r.pace_str + " /km" : "–"}</td>${sv ? `<td>${st && st.elev_m != null ? st.elev_m + " m" : "–"}</td><td>${st && st.cadence ? st.cadence + " spm" : "–"}</td>` : ""}<td>${fmt(r.strain, 1)}</td><td>${fmt(r.avg_hr)} / ${fmt(r.max_hr)}</td><td>${fmt(r.kcal)}</td><td>${zones(r.zones)}</td></tr>` +
+        (has ? `<tr class="splits" hidden><td colspan="${sv ? 10 : 8}">${splitsBlock(st)}</td></tr>` : ""); }).join("")
+      : `<tr><td colspan="${sv ? 10 : 8}" class="sub">No runs yet.</td></tr>`);
+  $("#runTable").querySelectorAll("tr.exp").forEach(tr => tr.onclick = () => { const d = tr.nextElementSibling; d.hidden = !d.hidden; tr.querySelector(".caret").textContent = d.hidden ? "▸" : "▾"; });
+  const um = DATA.unmatched_runs || [];
+  $("#unmatched").innerHTML = sv && um.length ? `<div class="note" style="margin-top:8px">${um.length} Strava run${um.length > 1 ? "s" : ""} without a WHOOP record (e.g. ${um.slice(0, 3).map(u => `${dayLabel(u.d)} ${fmt(u.km, 1)} km`).join(", ")}) — shown in Claude via get_run_detail, not counted above.</div>` : "";
+}
+
+/* Per-km splits as a mini bar chart of pace + a compact table. Faster km = taller bar. */
+function splitsBlock(st) {
+  const sp = st.splits, paces = sp.map(x => x.pace).filter(Boolean), slow = Math.max(...paces), fast = Math.min(...paces);
+  const bars = sp.map(x => { const h = x.pace ? 18 + (slow - x.pace) / ((slow - fast) || 1) * 42 : 4;
+    return `<div class="sp"><div class="spv">${x.pace_str || "–"}</div><div class="spb" style="height:${h}px" title="km ${x.km}: ${x.pace_str} /km, HR ${x.hr || "–"}, ${x.elev > 0 ? "+" : ""}${x.elev ?? 0} m"></div><div class="spk">${x.km}</div></div>`; }).join("");
+  const eff = st.efforts.filter(e => e.name !== "400m" && e.name !== "1/2 mile").map(e => `<span class="eff${e.pr_rank === 1 ? " pr" : ""}">${e.name} <b>${e.time}</b>${e.pr_rank === 1 ? " PR" : e.pr_rank ? ` #${e.pr_rank}` : ""}</span>`).join("");
+  return `<div class="splitwrap"><div class="splitmeta">${st.name ? `<b>${st.name}</b> · ` : ""}${st.moving_min} min moving · ${st.elev_m ?? 0} m elevation${st.cadence ? ` · ${st.cadence} spm` : ""}</div>
+    <div class="spchart">${bars}</div>
+    <table class="sptable"><tr><th>km</th>${sp.map(x => `<td>${x.km}</td>`).join("")}</tr><tr><th>pace</th>${sp.map(x => `<td>${x.pace_str || "–"}</td>`).join("")}</tr><tr><th>HR</th>${sp.map(x => `<td>${x.hr || "–"}</td>`).join("")}</tr><tr><th>elev</th>${sp.map(x => `<td>${x.elev == null ? "–" : (x.elev > 0 ? "+" : "") + x.elev}</td>`).join("")}</tr></table>
+    ${eff ? `<div class="effs">Best efforts in this run: ${eff}</div>` : ""}</div>`;
 }
 
 function renderStrength(cur, prev) {

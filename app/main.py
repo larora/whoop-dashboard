@@ -17,6 +17,7 @@ from . import db, payload
 from .auth import Sessions, client_ip
 from .config import Settings, load_settings
 from .mcp_server import TokenInPath, build_mcp
+from .strava import StravaClient, StravaError
 from .whoop import SyncRunner, WhoopClient, WhoopError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -29,11 +30,11 @@ class MetricIn(BaseModel):
     date: str | None = None  # ISO date; defaults to today
 
 
-def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
+def create_app(settings: Settings | None = None, transport=None, strava_transport=None) -> FastAPI:
     """App factory so tests can pass their own settings and a mocked WHOOP transport."""
     settings = settings or load_settings()
     sessions = Sessions(settings)
-    runner = SyncRunner(settings, transport=transport)
+    runner = SyncRunner(settings, transport=transport, strava_transport=strava_transport)
     mcp = build_mcp(settings, runner) if settings.mcp_token else None
 
     @asynccontextmanager
@@ -147,6 +148,41 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
             WhoopClient(settings, con, transport).exchange_code(code)
         except WhoopError as e:
             return HTMLResponse(f"<p>Token exchange failed: {e}. <a href='/'>Back</a></p>", status_code=502)
+        finally:
+            con.close()
+        runner.start_background()
+        resp = RedirectResponse("/", status_code=303)
+        sessions.write(resp, session)
+        return resp
+
+    # --------------------------------------------------------- Strava OAuth --
+    @app.get("/auth/strava", dependencies=[require_login])
+    def auth_strava(request: Request):
+        if not settings.strava_enabled:
+            raise HTTPException(404, "Strava is not configured (set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET)")
+        con = connection()
+        try:
+            url, state = StravaClient(settings, con, strava_transport).auth_url()
+        finally:
+            con.close()
+        resp = RedirectResponse(url, status_code=303)
+        sessions.write(resp, {**sessions.read(request), "strava_state": state})
+        return resp
+
+    @app.get("/auth/strava/callback", dependencies=[require_login])
+    def strava_callback(request: Request, code: str = "", state: str = "", error: str = "", scope: str = ""):
+        session = sessions.read(request)
+        expected = session.pop("strava_state", None)
+        if error or not code or not expected or state != expected:
+            log.warning("Strava callback rejected: error=%s state_ok=%s", error, state == expected)
+            return HTMLResponse("<p>Strava sign-in failed (state mismatch or denied). <a href='/'>Back</a></p>", status_code=400)
+        if "activity:read" not in scope:
+            return HTMLResponse("<p>Strava connected without activity access. Please reconnect and allow activity access. <a href='/'>Back</a></p>", status_code=400)
+        con = connection()
+        try:
+            StravaClient(settings, con, strava_transport).exchange_code(code)
+        except StravaError as e:
+            return HTMLResponse(f"<p>Strava token exchange failed: {e}. <a href='/'>Back</a></p>", status_code=502)
         finally:
             con.close()
         runner.start_background()

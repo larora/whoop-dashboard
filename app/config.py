@@ -25,10 +25,17 @@ class Settings:
     run_sports: tuple[str, ...]
     strength_sports: tuple[str, ...]
     walk_sports: tuple[str, ...]
+    strava_client_id: str | None   # Strava is optional; both must be set to enable it
+    strava_client_secret: str | None
+    strava_redirect_uri: str
 
     @property
     def db_path(self) -> Path:
         return self.data_dir / "whoop.db"
+
+    @property
+    def strava_enabled(self) -> bool:
+        return bool(self.strava_client_id and self.strava_client_secret)
 
     @property
     def cookie_secure(self) -> bool:
@@ -66,4 +73,9 @@ def load_settings(env: dict | None = None) -> Settings:
         run_sports=_csv(env.get("RUN_SPORTS", "running,treadmill,trail running,track running")),
         strength_sports=_csv(env.get("STRENGTH_SPORTS", "weightlifting,weightlifting msk,strength trainer,strength workout,functional fitness,powerlifting,crossfit")),
         walk_sports=_csv(env.get("WALK_SPORTS", "walking,hiking")),
+        strava_client_id=env.get("STRAVA_CLIENT_ID") or None,
+        strava_client_secret=env.get("STRAVA_CLIENT_SECRET") or None,
+        # Defaults to the same host as the WHOOP callback.
+        strava_redirect_uri=env.get("STRAVA_REDIRECT_URI")
+        or env["WHOOP_REDIRECT_URI"].replace("/auth/whoop/callback", "/auth/strava/callback"),
     )

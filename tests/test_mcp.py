@@ -38,7 +38,8 @@ def test_mcp_lists_tools(client):
     assert r.status_code == 200
     r = rpc(client, "tools/list")
     names = {t["name"] for t in r.json()["result"]["tools"]}
-    assert names == {"get_summary", "get_weekly", "get_daily", "get_workouts", "set_vo2max", "get_sync_status", "trigger_sync"}
+    assert names == {"get_summary", "get_weekly", "get_daily", "get_workouts", "get_run_detail", "get_personal_bests",
+                     "set_vo2max", "get_sync_status", "trigger_sync"}
 
 
 def test_mcp_summary_reflects_synced_data(client, settings, whoop):

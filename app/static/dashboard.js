@@ -73,9 +73,10 @@ function render() {
     <div class="card full"><h2>${icon("target")}This week</h2><div class="note">Sleep and training against your goals — patterns, not medical advice.</div><ul class="insights" id="ins"></ul></div>
     <div class="card full"><h2>${icon("run")}Running</h2><div class="note">Half-marathon prep: volume, pace and recent runs</div>
       <div class="minis" id="runTiles"></div>
+      <div id="prTiles"></div>
       <h3>Weekly distance</h3><div class="chart" id="cRunKm"></div>
       <h3>Pace per run (last 20)</h3><div class="chart" id="cPace"></div>
-      <h3>Last 10 runs</h3><div class="tbl"><table id="runTable"></table></div></div>
+      <h3>Last 10 runs</h3><div class="tbl"><table id="runTable"></table></div><div id="unmatched"></div></div>
     <div class="card full"><h2>${icon("dumbbell")}Strength</h2><div class="note">Sessions logged as strength workouts</div>
       <div class="minis" id="strTiles"></div><h3>Last 10 sessions</h3><div class="tbl"><table id="strTable"></table></div></div>
     <div class="card full"><h2>${icon("moon")}Sleep per night</h2><div class="note">Hours asleep (stages, naps included) next to hours in bed · the gap is time awake</div><div class="chart tall" id="cSleepD"></div>

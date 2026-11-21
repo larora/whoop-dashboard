@@ -159,6 +159,14 @@ SYNC_MINUTE=0
 
 Sport names are whatever WHOOP calls the activity when you log it. Check the "Recent workouts" table to see the exact names in your data.
 
+**Strava (optional): per-km splits, elevation, cadence, personal bests.** WHOOP can push workouts to Strava; Strava then holds the detail WHOOP's API lacks. To add it:
+
+1. At https://www.strava.com/settings/api create an application. Website: your dashboard URL. **Authorization Callback Domain:** just the host, e.g. `health.yourdomain.com` (or `localhost` for local dev). Copy the Client ID and Client Secret.
+2. Set `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `.env` (or `fly secrets set ...`) and restart. The callback URL defaults to `/auth/strava/callback` on the same host as the WHOOP one; override with `STRAVA_REDIRECT_URI` if needed.
+3. In the Running section, click **Connect Strava** and approve. Each Strava run is matched to the WHOOP workout that started within five minutes of it; matched runs show elevation, cadence and a click-to-expand per-km split chart, and a Personal bests row appears. Runs that exist only in Strava are listed separately. Strava syncs alongside WHOOP every morning; `get_run_detail` and `get_personal_bests` expose the same data over MCP.
+
+Strava's unapproved-app limit of one athlete is fine for a personal instance. Leave the two variables empty and nothing Strava-related appears.
+
 **VO2 max.** WHOOP's API doesn't expose it. Click the pencil on the VO2 max tile and type the number from the app whenever it changes; the history is kept.
 
 ## How it works, briefly
@@ -178,6 +186,7 @@ Sport names are whatever WHOOP calls the activity when you log it. Check the "Re
 | Dashboard shows **Connect WHOOP** again after working | token refresh failed; just reconnect. Logs say why |
 | `sqlite3.OperationalError: disk I/O error` on start | `DATA_DIR` is inside a cloud-synced folder (OneDrive, Dropbox, iCloud Drive). SQLite and sync clients don't mix. Point `DATA_DIR` somewhere unsynced, e.g. `~/WhoopData` |
 | Data disappeared after a redeploy | `DATA_DIR` pointed inside the container or app folder. Use a volume or a path outside the checkout |
+| Strava run not matched to a WHOOP workout | start times differ by more than 5 minutes. It still appears under "Strava runs without a WHOOP record" |
 | Strength sessions show 0 | your sport name differs; look at "Recent workouts" and add it to `STRENGTH_SPORTS` |
 | Start over | stop the app, delete the database file in `DATA_DIR`, start again |
 

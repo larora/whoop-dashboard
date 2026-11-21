@@ -11,7 +11,7 @@ Built as a side project to learn three things end to end: working with a real OA
 
 - **Daily sync.** At 9:00 every morning the app pulls recovery, sleep, strain and workouts from the WHOOP API into a local SQLite database. A **Sync now** button does the same on demand.
 - **Dashboard.** A single page built around two questions: *am I sleeping enough?* and *am I training the way I planned?* Details in [What the dashboard shows](#what-the-dashboard-shows) below.
-- **Ask Claude about it.** An MCP endpoint with seven tools: summary over N days, weekly rows, per-day rows, workouts, VO2 max entry, sync status, and trigger a sync. Connect it to Claude (desktop, web or Claude Code) and the data becomes something you can converse with. Adding it in Claude.ai is a custom connector with the server URL and a bearer token; details in [SETUP.md](SETUP.md#step-4-optional-extras).
+- **Ask Claude about it.** An MCP endpoint with nine tools: summary over N days, weekly rows, per-day rows, workouts, run detail with splits, personal bests, VO2 max entry, sync status, and trigger a sync. Connect it to Claude (desktop, web or Claude Code) and the data becomes something you can converse with. Adding it in Claude.ai is a custom connector with the server URL and a bearer token; details in [SETUP.md](SETUP.md#step-4-optional-extras).
 - **Private by design.** Single-password login, signed session cookie, lockout after repeated failures. The MCP endpoint uses its own bearer token. The only external host the app ever contacts is `api.prod.whoop.com`. Nothing is sent anywhere else.
 
 ## What the dashboard shows
@@ -34,6 +34,8 @@ It's a work in progress. I use it daily and keep changing it as I learn what I a
 **This week: plain-language insights.** Average sleep per night over the last 7 nights and how far from your need; time in bed vs awake; runs done out of your weekly goal, strength sessions out of goal, kilometres run out of your target and what's left; total exercise vs last week; how many recent weeks hit both session goals; whether your last four runs were faster or slower than the eight before.
 
 **Running.** Built for a training block (mine is a half marathon). Kilometres this week against a target, runs this week against a goal, average pace over your last four runs, longest recent run, VO2 max. A weekly-distance chart with the goal line, a pace-per-run chart with every run dated, and a table of the last ten runs: distance, duration, pace, strain, average and max heart rate, calories, and exact minutes spent in each heart-rate zone.
+
+**Strava, optionally.** If WHOOP pushes your workouts to Strava, connecting Strava adds what WHOOP's API lacks: per-km splits as a pace chart on each run, elevation gain, cadence, best efforts within a run, and a Personal bests row (1k, mile, 5k, 10k, half). Runs are matched by start time so nothing appears twice.
 
 **Strength.** Sessions this week against a goal, hours this week, average session length and strain, and the last ten sessions with the same per-zone minutes. (WHOOP's API doesn't carry sets, reps or weights, so this is time, effort and heart rate.)
 
@@ -97,6 +99,7 @@ app/
   main.py        routes, login, OAuth callback, scheduler startup, MCP mount
   auth.py        password check, signed cookie, lockout
   whoop.py       WHOOP API client and the sync job
+  strava.py      Strava client (optional): splits, best efforts, matching to WHOOP workouts
   db.py          SQLite schema and helpers
   payload.py     turns rows into the JSON the dashboard and MCP tools use
   mcp_server.py  the five MCP tools and the bearer-token gate

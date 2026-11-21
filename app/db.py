@@ -11,6 +11,18 @@ CREATE TABLE IF NOT EXISTS manual_metrics (
 CREATE TABLE IF NOT EXISTS oauth_tokens (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     access_token TEXT NOT NULL, refresh_token TEXT, expires_at REAL NOT NULL, scope TEXT);
+CREATE TABLE IF NOT EXISTS provider_tokens (
+    provider TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT, expires_at REAL NOT NULL, scope TEXT);
+CREATE TABLE IF NOT EXISTS strava_activities (
+    id INTEGER PRIMARY KEY, start TEXT, start_local TEXT, name TEXT, sport_type TEXT,
+    distance_m REAL, moving_s INTEGER, elapsed_s INTEGER, elev_gain_m REAL, avg_hr REAL, max_hr REAL,
+    avg_cadence REAL, avg_speed REAL, whoop_workout_id TEXT, detail_fetched INTEGER DEFAULT 0, updated_at TEXT, raw TEXT);
+CREATE TABLE IF NOT EXISTS strava_splits (
+    activity_id INTEGER, split INTEGER, distance_m REAL, elapsed_s INTEGER, moving_s INTEGER,
+    elev_diff_m REAL, avg_speed REAL, avg_hr REAL, PRIMARY KEY (activity_id, split));
+CREATE TABLE IF NOT EXISTS strava_best_efforts (
+    activity_id INTEGER, name TEXT, distance_m REAL, elapsed_s INTEGER, start_date TEXT, pr_rank INTEGER,
+    PRIMARY KEY (activity_id, name));
 CREATE TABLE IF NOT EXISTS cycles (
     id INTEGER PRIMARY KEY, start TEXT, "end" TEXT, tz TEXT, score_state TEXT,
     strain REAL, kilojoule REAL, avg_hr REAL, max_hr REAL, updated_at TEXT, raw TEXT);
@@ -98,7 +110,8 @@ def upsert(con, table: str, pk: str, rows: list[dict]) -> int:
 
 
 def table_counts(con) -> dict:
-    return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("cycles", "recovery", "sleep", "workouts")}
+    return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            for t in ("cycles", "recovery", "sleep", "workouts", "strava_activities", "strava_splits")}
 
 
 # --------------------------------------------------------- manual metrics ---
@@ -111,3 +124,26 @@ def set_metric(con, metric: str, d: str, value: float):
 def get_metric_history(con, metric: str) -> list[dict]:
     return [{"d": r["d"], "v": r["value"]} for r in
             con.execute("SELECT d, value FROM manual_metrics WHERE metric=? ORDER BY d", (metric,))]
+
+
+# -------------------------------------------------------- provider tokens ---
+def get_provider_tokens(con, provider: str) -> dict | None:
+    row = con.execute("SELECT * FROM provider_tokens WHERE provider=?", (provider,)).fetchone()
+    return dict(row) if row else None
+
+
+def save_provider_tokens(con, provider: str, tok: dict, previous: dict | None = None):
+    refresh = tok.get("refresh_token") or (previous or {}).get("refresh_token")
+    expires_at = tok.get("expires_at") or (time.time() + int(tok.get("expires_in", 3600)) - 120)
+    con.execute("INSERT OR REPLACE INTO provider_tokens (provider, access_token, refresh_token, expires_at, scope) VALUES (?, ?, ?, ?, ?)",
+                (provider, tok["access_token"], refresh, float(expires_at), tok.get("scope")))
+    set_meta(con, f"{provider}_connected", "1")
+
+
+def clear_provider_tokens(con, provider: str):
+    con.execute("DELETE FROM provider_tokens WHERE provider=?", (provider,))
+    set_meta(con, f"{provider}_connected", "0")
+
+
+def provider_connected(con, provider: str) -> bool:
+    return get_meta(con, f"{provider}_connected") == "1" and get_provider_tokens(con, provider) is not None

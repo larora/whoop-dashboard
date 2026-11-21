@@ -181,9 +181,10 @@ class WhoopClient:
 class SyncRunner:
     """Owns the single-flight lock so the scheduler and the 'Sync now' button never overlap."""
 
-    def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None):
+    def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None, strava_transport=None):
         self.settings = settings
         self.transport = transport
+        self.strava_transport = strava_transport
         self._lock = threading.Lock()
         self.running = False
         self.last_error: str | None = None
@@ -201,24 +202,34 @@ class SyncRunner:
         self.running = True
         started = time.time()
         con = db.connect(self.settings.db_path)
-        client = WhoopClient(self.settings, con, self.transport)
-        counts = {}
+        counts, errors = {}, []
         try:
-            start_iso = self._window_start(con)
-            log.info("sync start from %s", start_iso)
-            for table, (path, pk, mapper) in ENDPOINTS.items():
-                recs = client.fetch_all(path, start_iso)
-                counts[table] = db.upsert(con, table, pk, [mapper(r) for r in recs])
-            db.set_meta(con, "last_sync", datetime.now(timezone.utc).isoformat())
-            self.last_error = None
-            log.info("sync done in %.1fs: %s", time.time() - started, counts)
-            return counts
-        except WhoopError as e:
-            self.last_error = str(e)
-            log.error("sync failed after %.1fs: %s", time.time() - started, e)
-            return None
+            if db.whoop_connected(con):
+                client = WhoopClient(self.settings, con, self.transport)
+                try:
+                    start_iso = self._window_start(con)
+                    log.info("sync start from %s", start_iso)
+                    for table, (path, pk, mapper) in ENDPOINTS.items():
+                        recs = client.fetch_all(path, start_iso)
+                        counts[table] = db.upsert(con, table, pk, [mapper(r) for r in recs])
+                    db.set_meta(con, "last_sync", datetime.now(timezone.utc).isoformat())
+                except WhoopError as e:
+                    errors.append(f"WHOOP: {e}")
+                finally:
+                    client.close()
+            if self.settings.strava_enabled and db.provider_connected(con, "strava"):
+                from .strava import StravaError, sync_strava  # local import keeps whoop.py importable without strava
+                try:
+                    counts.update(sync_strava(con, self.settings, self.strava_transport))
+                except StravaError as e:
+                    errors.append(f"Strava: {e}")
+            self.last_error = "; ".join(errors) or None
+            if errors:
+                log.error("sync finished with errors after %.1fs: %s", time.time() - started, self.last_error)
+            else:
+                log.info("sync done in %.1fs: %s", time.time() - started, counts)
+            return None if errors and not counts else counts
         finally:
-            client.close()
             con.close()
             self.running = False
             self._lock.release()
