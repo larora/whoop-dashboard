@@ -64,6 +64,6 @@ def load_settings(env: dict | None = None) -> Settings:
         goal_run_km=float(env.get("GOAL_RUN_KM", "20")),
         # WHOOP sport names as they appear in the API (underscores or spaces both match).
         run_sports=_csv(env.get("RUN_SPORTS", "running,treadmill,trail running,track running")),
-        strength_sports=_csv(env.get("STRENGTH_SPORTS", "weightlifting,strength trainer,strength workout,functional fitness,powerlifting,crossfit")),
+        strength_sports=_csv(env.get("STRENGTH_SPORTS", "weightlifting,weightlifting msk,strength trainer,strength workout,functional fitness,powerlifting,crossfit")),
         walk_sports=_csv(env.get("WALK_SPORTS", "walking,hiking")),
     )

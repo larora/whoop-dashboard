@@ -39,7 +39,7 @@ Open `.env` in any text editor and fill in:
 | `DASHBOARD_PASSWORD` | a password of your choice for the login page |
 | `SESSION_SECRET` | a long random string. Generate one with: `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'` |
 
-Everything else can stay at its default. Then start it:
+Everything else can stay at its default, with one exception: if the repo folder is inside OneDrive, Dropbox or iCloud Drive, set `DATA_DIR=~/WhoopData` (or any unsynced path). SQLite databases don't survive being synced while in use, and your health data is better off outside a cloud folder anyway. Then start it:
 
 ```bash
 set -a && source .env && set +a && .venv/bin/uvicorn app.main:app --port 8080
@@ -136,7 +136,7 @@ GOAL_RUNS=4                 # run sessions per week
 GOAL_STRENGTH=3             # strength sessions per week
 GOAL_RUN_KM=20              # km per week
 RUN_SPORTS=running,treadmill,trail running,track running
-STRENGTH_SPORTS=weightlifting,strength trainer,strength workout,functional fitness,powerlifting,crossfit
+STRENGTH_SPORTS=weightlifting,weightlifting msk,strength trainer,strength workout,functional fitness,powerlifting,crossfit
 WALK_SPORTS=walking,hiking  # excluded from "hours exercised"
 TZ=Asia/Kolkata             # your timezone; sync runs at SYNC_HOUR:SYNC_MINUTE in it
 SYNC_HOUR=9
@@ -162,6 +162,7 @@ Sport names are whatever WHOOP calls the activity when you log it. Check the "Re
 | WHOOP shows a redirect URL error on sign-in | the URL in the WHOOP app must match `WHOOP_REDIRECT_URI` character for character, including `https` and the path |
 | Browser says the cookie is rejected / login loops | you're on plain `http` with a non-localhost address. Put HTTPS in front |
 | Dashboard shows **Connect WHOOP** again after working | token refresh failed; just reconnect. Logs say why |
+| `sqlite3.OperationalError: disk I/O error` on start | `DATA_DIR` is inside a cloud-synced folder (OneDrive, Dropbox, iCloud Drive). SQLite and sync clients don't mix. Point `DATA_DIR` somewhere unsynced, e.g. `~/WhoopData` |
 | Data disappeared after a redeploy | `DATA_DIR` pointed inside the container or app folder. Use a volume or a path outside the checkout |
 | Strength sessions show 0 | your sport name differs; look at "Recent workouts" and add it to `STRENGTH_SPORTS` |
 | Start over | stop the app, delete the database file in `DATA_DIR`, start again |

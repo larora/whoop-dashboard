@@ -86,13 +86,12 @@ def build_days(con) -> list[dict]:
 
 # --------------------------------------------------------------- workouts ---
 def categorize(sport: str, settings: Settings) -> str:
+    """Match WHOOP sport names to run/strength/walk. A configured name also matches variants that
+    start with it, so "weightlifting" covers WHOOP's "weightlifting_msk" (Strength Trainer)."""
     s = (sport or "").lower().replace("_", " ")
-    if s in settings.run_sports:
-        return "run"
-    if s in settings.strength_sports:
-        return "strength"
-    if s in settings.walk_sports:
-        return "walk"
+    for cat, names in (("run", settings.run_sports), ("strength", settings.strength_sports), ("walk", settings.walk_sports)):
+        if any(s == n or s.startswith(n + " ") for n in names):
+            return cat
     return "other"
 
 
