@@ -50,3 +50,11 @@ def test_mcp_summary_reflects_synced_data(client, settings, whoop):
     assert result["latest"]["d"] == "2026-02-20"  # cycle 49 starts 19th 18:00Z = 23:30 IST, labelled with wake-up day
     r = rpc(client, "tools/call", {"name": "get_workouts", "arguments": {"days": 36500, "sport": "run"}})
     assert len(tool_result(r)) == 50
+
+
+def test_mcp_token_in_path(client):
+    """Claude.ai's connector form can't set headers, so the token may come in the URL instead."""
+    h = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    assert client.post(f"/mcp/{MCP_TOKEN}", headers=h, json=body).status_code == 200
+    assert client.post("/mcp/wrong-token", headers=h, json=body).status_code == 401

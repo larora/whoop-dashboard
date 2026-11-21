@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from . import db, payload
 from .auth import Sessions, client_ip
 from .config import Settings, load_settings
-from .mcp_server import build_mcp
+from .mcp_server import TokenInPath, build_mcp
 from .whoop import SyncRunner, WhoopClient, WhoopError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -160,7 +160,9 @@ def create_app(settings: Settings | None = None, transport=None) -> FastAPI:
 
     if mcp:
         # add_route (not mount) so /mcp is served directly without a 307 to /mcp/
-        app.add_route("/mcp", mcp.streamable_http_app(), methods=["GET", "POST", "DELETE"])
+        mcp_app = mcp.streamable_http_app()
+        app.add_route("/mcp", mcp_app, methods=["GET", "POST", "DELETE"])
+        app.add_route("/mcp/{token}", TokenInPath(mcp_app, settings.mcp_token), methods=["GET", "POST", "DELETE"])
     return app
 
 

@@ -33,6 +33,23 @@ class BearerAuth:
         await self.app(scope, receive, send)
 
 
+class TokenInPath:
+    """Accepts the MCP token as the last path segment (/mcp/<token>) for clients that can't send a
+    custom Authorization header, e.g. the Claude.ai custom-connector form. Rewrites it into a Bearer
+    header and hands off to BearerAuth, so the same constant-time check applies."""
+
+    def __init__(self, app, token: str):
+        self.app, self.token = app, token
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            supplied = scope.get("path_params", {}).get("token", "")
+            headers = [(k, v) for k, v in scope.get("headers", []) if k != b"authorization"]
+            headers.append((b"authorization", f"Bearer {supplied}".encode()))
+            scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
+
+
 def build_mcp(settings: Settings, runner) -> FastMCP:
     # Host-header (DNS-rebinding) checks are off: the endpoint is bearer-protected and served over HTTPS on Fly,
     # and the Fly hostname isn't known until deploy time.

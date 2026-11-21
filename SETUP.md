@@ -127,7 +127,7 @@ They all build the `Dockerfile` directly. You need to: set the same environment 
 
 ## Step 4: Optional extras
 
-**Let Claude read your data (MCP).** Set `MCP_TOKEN` to a long random string and restart. The MCP server is then at `https://<your address>/mcp`. In Claude, add it as a custom connector with header `Authorization: Bearer <that token>`; in Claude Code: `claude mcp add --transport http whoop https://<your address>/mcp --header "Authorization: Bearer <that token>"`. Leave `MCP_TOKEN` empty and the endpoint doesn't exist.
+**Let Claude read your data (MCP).** Set `MCP_TOKEN` to a long random string and restart. The MCP server is then at `https://<your address>/mcp`. In Claude.ai or the desktop app, add a custom connector with URL `https://<your address>/mcp/<that token>` (the token goes in the URL because the connector form can't set headers); in Claude Code: `claude mcp add --transport http whoop https://<your address>/mcp --header "Authorization: Bearer <that token>"`. Leave `MCP_TOKEN` empty and the endpoint doesn't exist.
 
 **Training goals and categories.** Defaults shown; override in `.env`:
 
