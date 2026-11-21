@@ -1,34 +1,37 @@
-# Replace "whoop-dashboard" with the app name you pick in `fly launch`.
-app = "whoop-dashboard"
-primary_region = "bom"
+# fly.toml app configuration file generated for whoop-lakshay on 2026-11-21T10:33:25+04:00
+#
+# See https://docs.fly.io/reference/configuration for information about how to use this file.
+#
+
+app = 'whoop-lakshay'
+primary_region = 'sin'
 
 [build]
-
 [env]
-  DATA_DIR = "/data"
-  TZ = "Asia/Kolkata"
-  SYNC_HOUR = "9"
-  SYNC_MINUTE = "0"
-  INITIAL_DAYS = "365"
+  DATA_DIR = '/data'
+  INITIAL_DAYS = '365'
+  SYNC_HOUR = '9'
+  SYNC_MINUTE = '0'
+  TZ = 'Asia/Kolkata'
 
 [[mounts]]
-  source = "whoop_data"
-  destination = "/data"
+  source = 'whoop_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = false   # the in-process scheduler must stay alive
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
 
   [[http_service.checks]]
-    interval = "30s"
-    timeout = "5s"
-    grace_period = "10s"
-    method = "GET"
-    path = "/healthz"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/healthz'
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
