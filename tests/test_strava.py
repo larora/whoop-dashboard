@@ -169,3 +169,16 @@ def test_rate_limit_stops_cleanly_and_resumes(strava_settings):
     assert con.execute("SELECT COUNT(*) FROM strava_activities WHERE detail_fetched=0 AND sport_type IN ('Run','WeightTraining')").fetchone()[0] == 0
     con.close()
     assert runner.strava_retry_at is None
+
+
+def test_startup_resumes_pending_details(strava_settings, monkeypatch):
+    """After a deploy/restart the in-memory retry timer is gone; startup must re-arm it if details are pending."""
+    monkeypatch.setenv("SKIP_STARTUP_SYNC", "1")
+    connect_strava(strava_settings)
+    con = db.connect(strava_settings.db_path)
+    db.set_meta(con, "last_sync", "2099-01-01T00:00:00+00:00")  # WHOOP not stale
+    con.execute("INSERT INTO strava_activities (id, start, sport_type, detail_fetched) VALUES (1, '2026-01-01T00:00:00Z', 'Run', 0)")
+    con.commit(); con.close()
+    app = create_app(strava_settings, transport=FakeWhoop().transport, strava_transport=FakeStrava().transport)
+    with TestClient(app):
+        assert app.state.runner.strava_retry_at is not None

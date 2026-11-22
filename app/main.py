@@ -1,6 +1,7 @@
 """FastAPI app: dashboard, auth, WHOOP OAuth, sync trigger, scheduler and MCP mount."""
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -219,7 +220,18 @@ def start_scheduler(settings: Settings, runner: SyncRunner) -> BackgroundSchedul
     stale = not last or datetime.fromisoformat(last) < datetime.now(timezone.utc) - timedelta(hours=24)
     if connected and stale and os.environ.get("SKIP_STARTUP_SYNC") != "1":
         runner.start_background()
+    elif settings.strava_enabled and pending_strava_details(settings):
+        runner.strava_retry_at = time.time() + 60  # resume a detail backlog interrupted by a restart/deploy
     return scheduler
+
+
+def pending_strava_details(settings: Settings) -> int:
+    from .strava import pending_details
+    con = db.connect(settings.db_path)
+    try:
+        return pending_details(con) if db.provider_connected(con, "strava") else 0
+    finally:
+        con.close()
 
 
 def __getattr__(name):
