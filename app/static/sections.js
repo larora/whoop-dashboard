@@ -12,7 +12,7 @@ const barRows = rows => { const mx = Math.max(...rows.map(r => r.v)) || 1;
 const zones = (z, src) => { const zc = zoneColors(), t = z.reduce((a, b) => a + b, 0);
   if (!t) return `<span class="sub">–</span>`;
   const how = src === "stream" ? "computed from the Strava heart-rate stream" : "WHOOP's own zone buckets (no stream stored yet)";
-  return barRows(z.map((m, i) => ({ v: m, label: `Z${i}`, sub: src === "stream" ? zoneRange(i) : "", val: `${m}m`, color: zc[i],
+  return barRows(z.map((m, i) => ({ v: m, label: `Z${i}`, sub: src === "stream" ? zoneRange(i) : "", val: `${m}m <span class="pc">(${Math.round(m / t * 100)}%)</span>`, color: zc[i],
     title: `Zone ${i}: ${ZONE_PCT[i][0]}–${ZONE_PCT[i][1]}% of heart-rate reserve · ${Math.round(m / t * 100)}% of this workout · ${how}` })).filter(r => r.v)); };
 const mini = (lbl, val, sub = "") => `<div class="mini"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="cmp">${sub}</div></div>`;
 const srcTag = w => `<span class="src ${w.sources.length > 1 ? "both" : w.sources[0] === "Strava" ? "strava" : ""}" title="Where this workout came from">${w.sources.join(", ")}</span>`;
