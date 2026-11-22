@@ -30,10 +30,14 @@ function setNav(days, all) {
 
 function sleepTable(days) {
   const rows = [...days].reverse().filter(d => d.sleep != null);
-  // d.sleep already includes naps; night-only sleep is the difference.
-  return `<tr><th>Night of</th><th>Total slept</th><th>Slept at night</th><th>In bed</th><th>Awake</th><th>Light</th><th>Deep</th><th>REM</th><th>Nap</th><th>Bedtime</th><th>Woke up</th></tr>` +
-    rows.map(d => `<tr><td>${dowLabel(d.d)}</td><td><b>${hm(d.sleep)}</b></td><td>${hm(d.sleep - (d.nap || 0))}</td><td>${hm(d.in_bed)}</td><td>${Math.round((d.awake || 0) * 60)} min <span class="sub">(${pct(d.awake, d.in_bed)})</span></td>
-      <td>${hm(d.light)} <span class="sub">(${pct(d.light, d.sleep)})</span></td><td>${hm(d.sws)} <span class="sub">(${pct(d.sws, d.sleep)})</span></td><td>${hm(d.rem)} <span class="sub">(${pct(d.rem, d.sleep)})</span></td>
+  // d.sleep already includes naps; night-only sleep is the difference. Stages are stacked in one cell as proportional bars.
+  const stages = d => barRows([
+    { v: d.awake || 0, label: "Awake", val: `${Math.round((d.awake || 0) * 60)}m`, sub: pct(d.awake, d.in_bed), color: css("--muted"), title: "Awake as % of time in bed" },
+    { v: d.light || 0, label: "Light", val: hm(d.light), sub: pct(d.light, d.sleep), color: css("--light"), title: "Light sleep as % of total sleep" },
+    { v: d.sws || 0, label: "Deep", val: hm(d.sws), sub: pct(d.sws, d.sleep), color: css("--sws"), title: "Deep (slow-wave) sleep as % of total sleep" },
+    { v: d.rem || 0, label: "REM", val: hm(d.rem), sub: pct(d.rem, d.sleep), color: css("--rem"), title: "REM sleep as % of total sleep" }]);
+  return `<tr><th>Night of</th><th>Total slept</th><th>Slept at night</th><th>In bed</th><th>Stages</th><th>Nap</th><th>Bedtime</th><th>Woke up</th></tr>` +
+    rows.map(d => `<tr><td>${dowLabel(d.d)}</td><td><b>${hm(d.sleep)}</b></td><td>${hm(d.sleep - (d.nap || 0))}</td><td>${hm(d.in_bed)}</td><td class="stages">${stages(d)}</td>
       <td>${d.nap ? Math.round(d.nap * 60) + " min" : "–"}</td><td>${d.bed || "–"}</td><td>${d.wake || "–"}</td></tr>`).join("");
 }
 
@@ -89,13 +93,13 @@ function render() {
     <div class="card full"><h2>${icon("heart")}Recovery</h2><div class="note">Daily score with 7-day average</div><div class="chart" id="cRec"></div>
       <div class="legend"><span><i style="background:var(--green)"></i>67–100</span><span><i style="background:var(--yellow)"></i>34–66</span><span><i style="background:var(--red)"></i>0–33</span><span><i style="background:var(--ink);height:2px"></i>7-day avg</span></div></div>
     <div class="card full"><h2>${icon("list")}Recent workouts</h2><div class="tbl"><table id="wk"></table></div></div>
-    <div class="card full"><h2>${icon("dumbbell")}Strength sessions in detail</h2><div class="note">Exercises, sets, reps and weights as logged in the WHOOP Strength Trainer, read from the Strava activity description</div><div id="strDetail"></div></div>
   </div>`;
 
   const dtip = (i, body) => `<b>${dowLabel(L[i])}</b><br>${body}`;
   const every = dense ? 1 : undefined, top = dense ? (fn => fn) : () => undefined;
   const hmShort = h => h >= 1 ? `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, "0")}` : `${Math.round(h * 60)}m`;
-  groupChart($("#cSleepD"), L, { labelFn: dLabel, labelEvery: every, segLabel: dense ? v => hmShort(v) : null, topLabel: dense ? v => hmShort(v) : null, groups: [
+  const sleepSeg = (v, si, gi, i) => gi === 0 && si > 0 ? [hmShort(v), pct(v, days[i].sleep)] : hmShort(v);  // Deep/REM: hours + % of sleep
+  groupChart($("#cSleepD"), L, { labelFn: dLabel, labelEvery: every, segLabel: dense ? sleepSeg : null, topLabel: dense ? v => hmShort(v) : null, groups: [
       { segments: [{ values: col("light"), color: css("--light") }, { values: col("sws"), color: css("--sws"), dark: true }, { values: col("rem"), color: css("--rem") }] },
       { segments: [{ values: col("in_bed"), color: css("--grid") }] }],
     lines: [{ values: col("need"), color: css("--ink"), dash: "4 3" }],
@@ -111,7 +115,7 @@ function render() {
   tsChart($("#cRec"), L, { labelFn: dLabel, labelEvery: every, topLabel: dense ? i => fmt(days[i].rec) : null, bars: [{ values: col("rec") }], barColor: v => recColor(v), lines: [{ values: rolling(col("rec"), 7), color: css("--ink") }], yMin: 0, yMax: 100,
     tip: i => dtip(i, `Recovery <b>${fmt(days[i].rec)}%</b> · HRV ${fmt(days[i].hrv)} ms · RHR ${fmt(days[i].rhr)}`) });
 
-  renderRunning(weeks, cur, prev); renderStrength(cur, prev); renderStrengthDetail(); renderInsights(days, DATA.weeks, cur, prev);
+  renderRunning(weeks, cur, prev); renderStrength(cur, prev); renderInsights(days, DATA.weeks, cur, prev);
 
   const wks = DATA.workouts.filter(w => !RANGE || (w.d >= L[0] && w.d <= L[L.length - 1])).slice(0, 40);
   $("#wk").innerHTML = `<tr><th>Date</th>${DATA.strava_connected ? "<th>Source</th>" : ""}<th>Activity</th><th>Duration</th><th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>Distance</th><th>Pace</th><th>HR zones (min)</th></tr>` +

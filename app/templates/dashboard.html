@@ -55,8 +55,12 @@ table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:ta
 th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
 th{color:var(--muted);font-weight:600;font-size:12px}
 .tbl{overflow-x:auto}
-.zones{min-width:190px}.zbar{display:flex;height:8px;width:100%;border-radius:4px;overflow:hidden;background:var(--grid)}
-.zlist{display:flex;flex-wrap:wrap;gap:2px 8px;font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap}.zlist i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:3px}
+.rows{display:grid;gap:3px;min-width:230px;font-size:11px;line-height:13px}
+.zr{display:grid;grid-template-columns:8px 36px 74px 1fr 34px;align-items:center;gap:5px;color:var(--muted)}
+.zr i{width:8px;height:8px;border-radius:2px}.zr b{color:var(--ink);font-weight:600}.zr small{font-size:11px;white-space:nowrap}
+.zr .zb{height:9px;border-radius:3px;background:var(--grid);overflow:hidden}.zr .zb span{display:block;height:100%;border-radius:3px}
+.zr em{font-style:normal;font-weight:600;color:var(--ink);text-align:right;white-space:nowrap}
+td.stages .rows{min-width:250px}
 .nav{display:flex;align-items:center;gap:6px}.nav .btn{padding:5px 10px;font-size:16px;line-height:1}.period{font-size:13px;font-weight:600;min-width:140px;text-align:center}
 tr:hover td{background:color-mix(in srgb,var(--grid) 60%,transparent)}
 tr.exp{cursor:pointer}.caret{display:inline-block;width:14px;color:var(--muted)}
@@ -70,9 +74,6 @@ tr.splits td{background:var(--bg);padding:12px 14px}
 .effs{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px}.eff.pr{color:var(--green);font-weight:600}
 .src{font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;background:var(--grid);color:var(--muted);white-space:nowrap}
 .src.both{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}.src.strava{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange)}
-.sess{border-top:1px solid var(--line);padding:12px 0}.sesshead{font-size:13px;margin-bottom:6px}
-.extable{width:auto;min-width:420px}.extable td,.extable th{padding:5px 14px 5px 0}.extable tr.tot td{font-weight:600;border-bottom:0}
-.raw{font-family:ui-monospace,Menlo,monospace;font-size:11px}
 .connect{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px dashed var(--line);border-radius:10px;padding:10px 14px;margin:8px 0;font-size:13px;color:var(--muted)}
 .empty{padding:40px;text-align:center;color:var(--muted)}
 .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}

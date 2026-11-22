@@ -149,6 +149,7 @@ They all build the `Dockerfile` directly. You need to: set the same environment 
 GOAL_RUNS=4                 # run sessions per week
 GOAL_STRENGTH=3             # strength sessions per week
 GOAL_RUN_KM=20              # km per week
+MAX_HR=190                  # optional: your max heart rate, used to label HR zones in bpm (default: highest HR WHOOP has recorded)
 RUN_SPORTS=running,treadmill,trail running,track running
 STRENGTH_SPORTS=weightlifting,weightlifting msk,strength trainer,strength workout,functional fitness,powerlifting,crossfit
 WALK_SPORTS=walking,hiking  # excluded from "hours exercised"

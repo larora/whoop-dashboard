@@ -138,7 +138,16 @@ def build_payload(con, settings: Settings) -> dict:
             "vo2max": db.get_metric_history(con, "vo2max"),
             "prs": personal_bests(con), **strava_status(con, settings),
             "goals": {"runs": settings.goal_runs, "strength": settings.goal_strength, "run_km": settings.goal_run_km},
+            "max_hr": max_heart_rate(con, settings),
             "last_sync": db.get_meta(con, "last_sync"), "whoop_connected": db.whoop_connected(con)}
+
+
+def max_heart_rate(con, settings: Settings) -> int | None:
+    """MAX_HR from settings, else the highest heart rate WHOOP has recorded in any workout (WHOOP's zones are % of max HR)."""
+    if settings.max_hr:
+        return settings.max_hr
+    row = con.execute("SELECT MAX(max_hr) FROM workouts").fetchone()
+    return int(row[0]) if row and row[0] else None
 
 
 def summarize(days: list[dict]) -> dict:

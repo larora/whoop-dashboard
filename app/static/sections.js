@@ -1,8 +1,17 @@
 /* Running, strength and insights sections. Expects DATA, helpers from charts.js, and $ from dashboard.js. */
 const zoneColors = () => ["--muted", "--light", "--blue", "--teal", "--orange", "--red"].map(css);
-const zones = z => { const t = z.reduce((a, b) => a + b, 0) || 1, zc = zoneColors();
-  return `<div class="zones"><div class="zbar">${z.map((m, i) => `<span style="width:${m / t * 100}%;background:${zc[i]}"></span>`).join("")}</div>
-    <div class="zlist">${z.map((m, i) => m ? `<span><i style="background:${zc[i]}"></i>Z${i} ${m}m</span>` : "").join("")}</div></div>`; };
+const ZONE_PCT = [[0, 50], [50, 60], [60, 70], [70, 80], [80, 90], [90, 100]];  // WHOOP zones as % of max HR
+/* bpm range for zone i, from the max HR in the payload (MAX_HR setting or highest recorded). */
+const zoneRange = i => { const m = DATA.max_hr; if (!m) return ""; const [lo, hi] = ZONE_PCT[i];
+  return i === 0 ? `< ${Math.round(m * hi / 100)} bpm` : `${Math.round(m * lo / 100)}–${Math.round(m * hi / 100)} bpm`; };
+/* One line per item: label · sub-label · proportional bar · value. Used for HR zones and sleep stages. */
+const barRows = rows => { const mx = Math.max(...rows.map(r => r.v)) || 1;
+  return `<div class="rows">${rows.map(r => `<div class="zr" title="${r.title || ""}"><i style="background:${r.color}"></i><b>${r.label}</b><small>${r.sub || ""}</small>
+    <div class="zb"><span style="width:${r.v / mx * 100}%;background:${r.color}"></span></div><em>${r.val}</em></div>`).join("")}</div>`; };
+const zones = z => { const zc = zoneColors(), t = z.reduce((a, b) => a + b, 0);
+  if (!t) return `<span class="sub">–</span>`;
+  return barRows(z.map((m, i) => ({ v: m, label: `Z${i}`, sub: zoneRange(i), val: `${m}m`, color: zc[i],
+    title: `Zone ${i}: ${ZONE_PCT[i][0]}–${ZONE_PCT[i][1]}% of max HR${DATA.max_hr ? ` (${DATA.max_hr} bpm)` : ""} · ${Math.round(m / t * 100)}% of this workout` })).filter(r => r.v)); };
 const mini = (lbl, val, sub = "") => `<div class="mini"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="cmp">${sub}</div></div>`;
 const srcTag = w => `<span class="src ${w.sources.length > 1 ? "both" : w.sources[0] === "Strava" ? "strava" : ""}" title="Where this workout came from">${w.sources.join(", ")}</span>`;
 const goalTxt = (n, g) => `<span class="${n >= g ? "up" : ""}">${n}</span><small>/${g}</small>`;
@@ -93,42 +102,3 @@ function renderInsights(days, weeks, cur, prev) {
   $("#ins").innerHTML = ins.map(s => `<li>${s}</li>`).join("") || "<li>Not enough data yet.</li>";
 }
 
-
-/* Strength sessions in detail: the exercise list WHOOP writes into the Strava description, parsed per session,
-   plus a per-exercise progression across recent sessions. */
-function renderStrengthDetail() {
-  const host = $("#strDetail");
-  if (!DATA.strava_enabled) { host.closest(".card").hidden = true; return; }
-  host.closest(".card").hidden = false;
-  if (!DATA.strava_connected) { host.innerHTML = `<div class="connect"><span>Connect Strava to see exercises, sets, reps and weights for each session.</span><a class="btn" href="/auth/strava">Connect Strava</a></div>`; return; }
-  const sessions = DATA.workouts.filter(w => w.cat === "strength").slice(0, 10);
-  const withEx = sessions.filter(s => s.strava && s.strava.exercises.length);
-  const fmtReps = e => e.reps_list ? e.reps_list : e.reps != null ? `${e.sets} × ${e.reps}` : e.seconds ? `${e.sets} × ${e.seconds}s` : e.sets ? `${e.sets} sets` : "–";
-  // progression: last 4 appearances of each exercise, newest first
-  const hist = {};
-  DATA.workouts.filter(w => w.cat === "strength" && w.strava).forEach(w => w.strava.exercises.forEach(e => (hist[e.exercise] ||= []).push({ d: w.d, ...e })));
-  const prog = Object.entries(hist).filter(([, v]) => v.length >= 2).sort((a, b) => b[1].length - a[1].length).slice(0, 12);
-  let html = "";
-  if (prog.length) html += `<h3>${icon("sparkle", 12)}Progression · last sessions per exercise</h3><div class="tbl"><table><tr><th>Exercise</th><th>Times</th><th>Best weight</th><th>Recent (newest first)</th></tr>` +
-    prog.map(([name, v]) => { const best = Math.max(...v.map(x => x.weight_kg || 0));
-      return `<tr><td><b>${name}</b></td><td>${v.length}</td><td>${best ? best + " kg" : "–"}</td><td class="sub">${v.slice(0, 4).map(x => `${dayLabel(x.d)}: ${fmtReps(x)}${x.weight_kg ? " @ " + x.weight_kg + " kg" : ""}`).join(" · ")}</td></tr>`; }).join("") + `</table></div>`;
-  html += `<h3>${icon("list", 12)}Last ${sessions.length} sessions</h3>`;
-  if (!sessions.length) html += `<div class="note">No strength sessions yet.</div>`;
-  sessions.forEach(s => { const st = s.strava;
-    html += `<div class="sess"><div class="sesshead"><b>${dayLabel(s.d)} ${s.t}</b> · <span style="text-transform:capitalize">${s.sport}</span> · ${s.min} min${s.strain != null ? ` · strain ${fmt(s.strain, 1)}` : ""}${s.avg_hr ? ` · HR ${s.avg_hr}` : ""} · ${srcTag(s)}${st && st.name && st.name.toLowerCase() !== s.sport.toLowerCase() ? ` · <span class="sub">${st.name}</span>` : ""}</div>`;
-    if (st && st.exercises.length) {
-      const vol = st.exercises.reduce((a, e) => a + (e.volume_kg || 0), 0);
-      html += `<div class="tbl"><table class="extable"><tr><th>Exercise</th><th>Sets × reps</th><th>Weight</th><th>Volume</th></tr>` +
-        st.exercises.map(e => `<tr><td>${e.exercise}</td><td>${fmtReps(e)}</td><td>${e.weight_kg != null ? e.weight_kg + " kg" : "–"}</td><td>${e.volume_kg ? Math.round(e.volume_kg).toLocaleString() + " kg" : "–"}</td></tr>`).join("") +
-        (vol ? `<tr class="tot"><td colspan="3">Total volume</td><td>${Math.round(vol).toLocaleString()} kg</td></tr>` : "") + `</table></div>`;
-      if (st.notes.length) html += `<div class="sub" style="margin-top:4px">${st.notes.join(" · ")}</div>`;
-    } else if (st && st.detail_fetched) {
-      html += `<div class="sub">${st.description ? `Description had no recognisable exercise lines:<br><span class="raw">${st.description.replace(/</g, "&lt;").replace(/\n/g, "<br>")}</span>` : "Strava description is empty for this session — WHOOP didn't include the exercise list."}</div>`;
-    } else if (st) {
-      html += `<div class="sub">Detail not fetched yet — will appear after the next sync.</div>`;
-    } else {
-      html += `<div class="sub">No matching Strava activity (WHOOP only).</div>`;
-    }
-    html += `</div>`; });
-  host.innerHTML = html;
-}

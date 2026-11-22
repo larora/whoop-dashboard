@@ -94,7 +94,9 @@ function groupChart(host, labels, { groups, goal, lines = [], yMin = 0, yMax, ti
   labels.forEach((_, i) => groups.forEach((g, gi) => { let base = lo; const bx = x(i) - total / 2 + gi * gw + (gw - bw) / 2, top = g.segments.reduce((s, sg) => s + (sg.values[i] || 0), 0);
     g.segments.forEach((sg, si) => { const v = sg.values[i]; if (!v) return; const h = Math.max(0, y(base) - y(base + v));
       el("rect", { x: bx, y: y(base + v), width: bw, height: h, rx: 3, fill: gradient(svg, sg.color), stroke: css("--card"), "stroke-width": 1 }, svg);
-      if (segLabel && h >= 14 && bw >= 34) el("text", { x: bx + bw / 2, y: y(base + v) + h / 2 + 3.5, "text-anchor": "middle", "font-size": 10, "font-weight": 600, fill: sg.dark ? "#fff" : css("--ink"), opacity: .9 }, svg).textContent = segLabel(v, si, gi, i);
+      if (segLabel && h >= 14 && bw >= 34) { const lab = segLabel(v, si, gi, i), lines = Array.isArray(lab) ? (h >= 28 ? lab : [lab.join(" ")]) : [lab];
+        const t = el("text", { x: bx + bw / 2, y: y(base + v) + h / 2 + 3.5 - (lines.length - 1) * 5.5, "text-anchor": "middle", "font-size": 10, "font-weight": 600, fill: sg.dark ? "#fff" : css("--ink"), opacity: .9 }, svg);
+        lines.forEach((ln, k) => { el("tspan", k ? { x: bx + bw / 2, dy: 11 } : {}, t).textContent = ln; }); }
       base += v; });
     if (topLabel && top) el("text", { x: bx + bw / 2, y: y(top) - 5, "text-anchor": "middle", "font-size": 10, "font-weight": 600, fill: css("--ink") }, svg).textContent = topLabel(top, gi, i); }));
   lines.forEach(l => drawLine(svg, l, x, y, iw, pad.t + ih));
