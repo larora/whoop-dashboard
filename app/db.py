@@ -26,6 +26,13 @@ CREATE TABLE IF NOT EXISTS strava_exercises (
 CREATE TABLE IF NOT EXISTS strava_best_efforts (
     activity_id INTEGER, name TEXT, distance_m REAL, elapsed_s INTEGER, start_date TEXT, pr_rank INTEGER,
     PRIMARY KEY (activity_id, name));
+CREATE TABLE IF NOT EXISTS strava_streams (
+    activity_id INTEGER PRIMARY KEY, n INTEGER, time TEXT, heartrate TEXT, distance TEXT, velocity TEXT,
+    altitude TEXT, cadence TEXT, grade TEXT, fetched_at TEXT);
+CREATE TABLE IF NOT EXISTS activity_metrics (
+    activity_id INTEGER PRIMARY KEY, whoop_workout_id TEXT, d TEXT, sport_type TEXT, duration_s INTEGER,
+    peak_hr REAL, hr_30s REAL, hr_60s REAL, vo2_windows TEXT,
+    zone_s TEXT, vo2_est REAL, vo2_n INTEGER, trimp REAL, params TEXT, computed_at TEXT);
 CREATE TABLE IF NOT EXISTS cycles (
     id INTEGER PRIMARY KEY, start TEXT, "end" TEXT, tz TEXT, score_state TEXT,
     strain REAL, kilojoule REAL, avg_hr REAL, max_hr REAL, updated_at TEXT, raw TEXT);
@@ -61,7 +68,9 @@ def _migrate(con):
     cols = {r[1] for r in con.execute("PRAGMA table_info(strava_activities)")}
     if "description" not in cols:
         con.execute("ALTER TABLE strava_activities ADD COLUMN description TEXT")
-        con.commit()
+    if "streams_fetched" not in cols:
+        con.execute("ALTER TABLE strava_activities ADD COLUMN streams_fetched INTEGER DEFAULT 0")  # -1 = Strava has none
+    con.commit()
 
 
 # ------------------------------------------------------------------- meta ---
@@ -123,7 +132,7 @@ def upsert(con, table: str, pk: str, rows: list[dict]) -> int:
 
 def table_counts(con) -> dict:
     return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-            for t in ("cycles", "recovery", "sleep", "workouts", "strava_activities", "strava_splits")}
+            for t in ("cycles", "recovery", "sleep", "workouts", "strava_activities", "strava_splits", "strava_streams", "activity_metrics")}
 
 
 # --------------------------------------------------------- manual metrics ---

@@ -1,17 +1,19 @@
 /* Running, strength and insights sections. Expects DATA, helpers from charts.js, and $ from dashboard.js. */
 const zoneColors = () => ["--muted", "--light", "--blue", "--teal", "--orange", "--red"].map(css);
-const ZONE_PCT = [[0, 50], [50, 60], [60, 70], [70, 80], [80, 90], [90, 100]];  // WHOOP zones as % of max HR
-/* bpm range for zone i, from the max HR in the payload (MAX_HR setting or highest recorded). */
-const zoneRange = i => { const m = DATA.max_hr; if (!m) return ""; const [lo, hi] = ZONE_PCT[i];
-  return i === 0 ? `< ${Math.round(m * hi / 100)} bpm` : `${Math.round(m * lo / 100)}–${Math.round(m * hi / 100)} bpm`; };
+const ZONE_PCT = [[0, 50], [50, 60], [60, 70], [70, 80], [80, 90], [90, 100]];  // % of heart-rate reserve
+const zoneBounds = () => (DATA.fitness && DATA.fitness.zones && DATA.fitness.zones.bounds) || null;
+/* bpm range for zone i from the derived boundaries (max HR held 30 s, 30-day resting HR). */
+const zoneRange = i => { const b = zoneBounds(); if (!b) return "";
+  return i === 0 ? `< ${b[0]} bpm` : i === 5 ? `≥ ${b[4]} bpm` : `${b[i - 1]}–${b[i] - 1} bpm`; };
 /* One line per item: label · sub-label · proportional bar · value. Used for HR zones and sleep stages. */
 const barRows = rows => { const mx = Math.max(...rows.map(r => r.v)) || 1;
   return `<div class="rows">${rows.map(r => `<div class="zr" title="${r.title || ""}"><i style="background:${r.color}"></i><b>${r.label}</b><small>${r.sub || ""}</small>
     <div class="zb"><span style="width:${r.v / mx * 100}%;background:${r.color}"></span></div><em>${r.val}</em></div>`).join("")}</div>`; };
-const zones = z => { const zc = zoneColors(), t = z.reduce((a, b) => a + b, 0);
+const zones = (z, src) => { const zc = zoneColors(), t = z.reduce((a, b) => a + b, 0);
   if (!t) return `<span class="sub">–</span>`;
-  return barRows(z.map((m, i) => ({ v: m, label: `Z${i}`, sub: zoneRange(i), val: `${m}m`, color: zc[i],
-    title: `Zone ${i}: ${ZONE_PCT[i][0]}–${ZONE_PCT[i][1]}% of max HR${DATA.max_hr ? ` (${DATA.max_hr} bpm)` : ""} · ${Math.round(m / t * 100)}% of this workout` })).filter(r => r.v)); };
+  const how = src === "stream" ? "computed from the Strava heart-rate stream" : "WHOOP's own zone buckets (no stream stored yet)";
+  return barRows(z.map((m, i) => ({ v: m, label: `Z${i}`, sub: src === "stream" ? zoneRange(i) : "", val: `${m}m`, color: zc[i],
+    title: `Zone ${i}: ${ZONE_PCT[i][0]}–${ZONE_PCT[i][1]}% of heart-rate reserve · ${Math.round(m / t * 100)}% of this workout · ${how}` })).filter(r => r.v)); };
 const mini = (lbl, val, sub = "") => `<div class="mini"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="cmp">${sub}</div></div>`;
 const srcTag = w => `<span class="src ${w.sources.length > 1 ? "both" : w.sources[0] === "Strava" ? "strava" : ""}" title="Where this workout came from">${w.sources.join(", ")}</span>`;
 const goalTxt = (n, g) => `<span class="${n >= g ? "up" : ""}">${n}</span><small>/${g}</small>`;
@@ -41,7 +43,7 @@ function renderRunning(weeks, cur, prev) {
   const sv = DATA.strava_connected;
   $("#runTable").innerHTML = `<tr><th>Date</th>${sv ? "<th>Source</th>" : ""}<th>Distance</th><th>Duration</th><th>Pace</th>${sv ? "<th>Elev</th><th>Cadence</th>" : ""}<th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>HR zones (min)</th></tr>` +
     (recent.length ? recent.map((r, i) => { const st = r.strava, has = st && st.splits.length;
-      return `<tr class="${has ? "exp" : ""}" data-i="${i}" title="${has ? "Click for per-km splits" : ""}"><td>${has ? "<span class=\"caret\">▸</span>" : ""}${dayLabel(r.d)} ${r.t}</td>${sv ? `<td>${srcTag(r)}</td>` : ""}<td>${r.km ? fmt(r.km, 2) + " km" : "–"}</td><td>${fmt(r.min)} min</td><td>${r.pace_str ? r.pace_str + " /km" : "–"}</td>${sv ? `<td>${st && st.elev_m != null ? st.elev_m + " m" : "–"}</td><td>${st && st.cadence ? st.cadence + " spm" : "–"}</td>` : ""}<td>${fmt(r.strain, 1)}</td><td>${fmt(r.avg_hr)} / ${fmt(r.max_hr)}</td><td>${fmt(r.kcal)}</td><td>${zones(r.zones)}</td></tr>` +
+      return `<tr class="${has ? "exp" : ""}" data-i="${i}" title="${has ? "Click for per-km splits" : ""}"><td>${has ? "<span class=\"caret\">▸</span>" : ""}${dayLabel(r.d)} ${r.t}</td>${sv ? `<td>${srcTag(r)}</td>` : ""}<td>${r.km ? fmt(r.km, 2) + " km" : "–"}</td><td>${fmt(r.min)} min</td><td>${r.pace_str ? r.pace_str + " /km" : "–"}</td>${sv ? `<td>${st && st.elev_m != null ? st.elev_m + " m" : "–"}</td><td>${st && st.cadence ? st.cadence + " spm" : "–"}</td>` : ""}<td>${fmt(r.strain, 1)}</td><td>${fmt(r.avg_hr)} / ${fmt(r.max_hr)}</td><td>${fmt(r.kcal)}</td><td>${zones(r.zones, r.zones_src)}</td></tr>` +
         (has ? `<tr class="splits" hidden><td colspan="${sv ? 11 : 8}">${splitsBlock(st)}</td></tr>` : ""); }).join("")
       : `<tr><td colspan="${sv ? 11 : 8}" class="sub">No runs yet.</td></tr>`);
   $("#runTable").querySelectorAll("tr.exp").forEach(tr => tr.onclick = () => { const d = tr.nextElementSibling; d.hidden = !d.hidden; tr.querySelector(".caret").textContent = d.hidden ? "▸" : "▾"; });
@@ -69,7 +71,7 @@ function renderStrength(cur, prev) {
     mini("Last session", sess[0] ? dayLabel(sess[0].d) : "–", sess[0] ? `${sess[0].min} min · strain ${fmt(sess[0].strain, 1)}` : "");
   const sv = DATA.strava_connected;
   $("#strTable").innerHTML = `<tr><th>Date</th>${sv ? "<th>Source</th>" : ""}<th>Activity</th><th>Duration</th><th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>HR zones (min)</th></tr>` +
-    (recent.length ? recent.map(s => `<tr><td>${dayLabel(s.d)} ${s.t}</td>${sv ? `<td>${srcTag(s)}</td>` : ""}<td style="text-transform:capitalize">${s.sport}</td><td>${fmt(s.min)} min</td><td>${fmt(s.strain, 1)}</td><td>${fmt(s.avg_hr)} / ${fmt(s.max_hr)}</td><td>${fmt(s.kcal)}</td><td>${zones(s.zones)}</td></tr>`).join("")
+    (recent.length ? recent.map(s => `<tr><td>${dayLabel(s.d)} ${s.t}</td>${sv ? `<td>${srcTag(s)}</td>` : ""}<td style="text-transform:capitalize">${s.sport}</td><td>${fmt(s.min)} min</td><td>${fmt(s.strain, 1)}</td><td>${fmt(s.avg_hr)} / ${fmt(s.max_hr)}</td><td>${fmt(s.kcal)}</td><td>${zones(s.zones, s.zones_src)}</td></tr>`).join("")
       : `<tr><td colspan="7" class="sub">No strength sessions yet. Sessions logged as ${["weightlifting", "strength trainer"].join(", ")} etc. appear here.</td></tr>`);
 }
 
@@ -102,3 +104,24 @@ function renderInsights(days, weeks, cur, prev) {
   $("#ins").innerHTML = ins.map(s => `<li>${s}</li>`).join("") || "<li>Not enough data yet.</li>";
 }
 
+
+/* Fitness: metrics derived from raw streams — max HR, resting HR, zone boundaries, VO2 max estimate and its trend. */
+function renderFitness() {
+  const f = DATA.fitness || {}, host = $("#fitTiles"), mx = f.max_hr || {}, v = f.vo2max, manual = DATA.vo2max.length ? DATA.vo2max[DATA.vo2max.length - 1] : null;
+  const srcTxt = { stream: mx.d ? `held 30 s on ${dayLabel(mx.d)}${mx.peak ? ` · peak ${fmt(mx.peak)}` : ""}` : "from heart-rate streams", setting: "set in MAX_HR", whoop_peaks_p95: "top 5% of WHOOP peaks · connect Strava for streams" }[mx.source] || "no data yet";
+  host.innerHTML =
+    mini("Max heart rate", mx.value ? `${mx.value}<small> bpm</small>` : "–", srcTxt) +
+    mini("Resting HR, 30 days", f.resting_hr ? `${fmt(f.resting_hr)}<small> bpm</small>` : "–", "WHOOP nightly average") +
+    mini("VO2 max, estimated", v && v.estimate ? `${fmt(v.estimate, 1)}<small> ml/kg/min</small>` : "–", v && v.estimate ? `median of ${v.runs_used} runs · ${dayLabel(v.from)} – ${dayLabel(v.to)}` : "needs steady runs with HR streams") +
+    mini("Race-pace check (VDOT)", v && v.vdot && v.vdot.value ? `${fmt(v.vdot.value, 1)}` : "–", v && v.vdot ? `from your ${v.vdot.from} best effort · ${dayLabel(v.vdot.d)}` : "from the fastest recent 5k / 10k") +
+    mini("WHOOP app says", manual ? `${fmt(manual.v, 1)}` : "–", manual ? `entered ${dayLabel(manual.d)}` : "enter it on the VO2 max tile") +
+    mini("Training load, 7 days", f.trimp_7d != null ? `${f.trimp_7d}<small> TRIMP</small>` : "–", "Banister TRIMP from HR streams");
+  const b = f.zones && f.zones.bounds, zc = zoneColors();
+  $("#fitZones").innerHTML = b ? `<div class="legend">${["Z1", "Z2", "Z3", "Z4", "Z5"].map((z, i) => `<span><i style="background:${zc[i + 1]}"></i>${z} ${zoneRange(i + 1)}</span>`).join("")}</div>
+    <div class="note">Zones are ${ZONE_PCT.slice(1).map(p => p[0]).join("/")}% of heart-rate reserve (max ${mx.value} − resting ${fmt(f.resting_hr)}), applied to each activity's own heart-rate stream.${f.streams && f.streams.pending ? ` ${f.streams.pending} activities still waiting for their stream.` : ""}</div>` :
+    `<div class="note">Zone boundaries appear once Strava streams are stored and WHOOP has resting-HR data.</div>`;
+  const pr = v && v.per_run ? v.per_run.slice(-20) : [];
+  if (pr.length >= 2) tsChart($("#cVo2"), pr.map(r => r.d), { lines: [{ values: pr.map(r => r.v), color: css("--teal"), dots: true, area: true }], labelEvery: 1, topLabel: i => fmt(pr[i].v, 1),
+    yMin: Math.floor(Math.min(...pr.map(r => r.v)) - 3), tip: i => `<b>${fmt(pr[i].v, 1)}</b> ml/kg/min · ${pr[i].windows} steady windows` });
+  else $("#cVo2").innerHTML = `<div class="note">Per-run estimates appear after a few runs with streams.</div>`;
+}

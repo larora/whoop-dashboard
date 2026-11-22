@@ -62,8 +62,9 @@ def _enrichment(a, splits, efforts, exercises) -> dict:
 
 def strava_only_workouts(con, settings) -> list[dict]:
     """Strava activities with no WHOOP counterpart, shaped like build_workouts rows with sources=["Strava"]."""
-    from .payload import local_dt, pace_str, r1  # late import: payload imports this module
-    enriched = {}
+    from .analysis import metrics_by_activity
+    from .payload import _zone_fields, local_dt, pace_str, r1  # late import: payload imports this module
+    metrics = metrics_by_activity(con)
     splits, efforts, exercises = {}, {}, {}
     for r in con.execute("SELECT * FROM strava_exercises ORDER BY activity_id, ord"):
         exercises.setdefault(r["activity_id"], []).append({k: r[k] for k in ("exercise", "sets", "reps", "reps_list", "weight_kg", "seconds", "volume_kg", "raw")})
@@ -82,7 +83,7 @@ def strava_only_workouts(con, settings) -> list[dict]:
         out.append({
             "d": d, "t": t, "sport": a["name"] or a["sport_type"], "cat": cat, "min": mins,
             "strain": None, "avg_hr": round(a["avg_hr"]) if a["avg_hr"] else None, "max_hr": round(a["max_hr"]) if a["max_hr"] else None,
-            "kcal": None, "km": km, "pace": pace, "pace_str": pace_str(pace), "zones": [0, 0, 0, 0, 0, 0],
+            "kcal": None, "km": km, "pace": pace, "pace_str": pace_str(pace), **_zone_fields(metrics.get(a["id"]), [0, 0, 0, 0, 0, 0]),
             "sources": ["Strava"], "strava": _enrichment(a, splits, efforts, exercises), "start": a["start"],
         })
     return out

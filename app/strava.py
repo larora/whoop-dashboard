@@ -30,6 +30,7 @@ MATCH_WINDOW_S = 300  # WHOOP and Strava start times for the same run are usuall
 # Strava allows 100 requests per 15 min (200 once an app is approved) and 1000/day. Stay under the lower
 # limit per pass; whatever is left is fetched on the next pass (every 15 min while anything is pending).
 DETAIL_BUDGET = 80
+STREAM_KEYS = "time,heartrate,distance,velocity_smooth,altitude,cadence,grade_smooth"
 
 
 class StravaError(Exception):
@@ -119,6 +120,16 @@ class StravaClient:
     def activity_detail(self, activity_id: int) -> dict:
         return self._request("GET", f"{API}/activities/{activity_id}", auth=True, params={"include_all_efforts": "false"})
 
+    def activity_streams(self, activity_id: int) -> dict | None:
+        """Second-by-second streams keyed by type, or None when Strava has none for this activity (404)."""
+        try:
+            return self._request("GET", f"{API}/activities/{activity_id}/streams", auth=True,
+                                 params={"keys": STREAM_KEYS, "key_by_type": "true"})
+        except StravaError as e:
+            if "HTTP 404" in str(e):
+                return None
+            raise
+
     def close(self):
         self.http.close()
 
@@ -173,9 +184,26 @@ def _store_detail(con, d: dict):
     con.execute("UPDATE strava_activities SET detail_fetched=1 WHERE id=?", (aid,))
 
 
+def _store_streams(con, aid: int, streams: dict | None):
+    if not streams:
+        con.execute("UPDATE strava_activities SET streams_fetched=-1 WHERE id=?", (aid,))
+        return
+    col = {"time": "time", "heartrate": "heartrate", "distance": "distance", "velocity_smooth": "velocity",
+           "altitude": "altitude", "cadence": "cadence", "grade_smooth": "grade"}
+    vals = {c: json.dumps(streams[k]["data"]) if k in streams else None for k, c in col.items()}
+    n = len(streams["time"]["data"]) if "time" in streams else max((len(v["data"]) for v in streams.values()), default=0)
+    con.execute("""INSERT OR REPLACE INTO strava_streams (activity_id, n, time, heartrate, distance, velocity, altitude, cadence, grade, fetched_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (aid, n, vals["time"], vals["heartrate"], vals["distance"], vals["velocity"], vals["altitude"], vals["cadence"], vals["grade"],
+                 datetime.now(timezone.utc).isoformat()))
+    con.execute("UPDATE strava_activities SET streams_fetched=1 WHERE id=?", (aid,))
+
+
 def pending_details(con) -> int:
+    """Activities still owed an API call: detail (runs/strength) or streams (every activity)."""
     marks = ", ".join("?" for _ in DETAIL_TYPES)
-    return con.execute(f"SELECT COUNT(*) FROM strava_activities WHERE detail_fetched=0 AND sport_type IN ({marks})", tuple(DETAIL_TYPES)).fetchone()[0]
+    return con.execute(f"SELECT COUNT(*) FROM strava_activities WHERE (detail_fetched=0 AND sport_type IN ({marks})) OR streams_fetched=0",
+                       tuple(DETAIL_TYPES)).fetchone()[0]
 
 
 def sync_strava(con, settings: Settings, transport=None, details_only: bool = False) -> dict:
@@ -205,8 +233,23 @@ def sync_strava(con, settings: Settings, transport=None, details_only: bool = Fa
                 break
             con.commit()
             fetched += 1
+        # Streams (full HR / pace / altitude series) for every activity, newest first, with what's left of the budget.
+        streams = 0
+        if not limited:
+            for row in con.execute("SELECT id FROM strava_activities WHERE streams_fetched=0 ORDER BY start DESC LIMIT ?",
+                                   (max(0, DETAIL_BUDGET - fetched),)).fetchall():
+                try:
+                    _store_streams(con, row["id"], client.activity_streams(row["id"]))
+                except StravaRateLimited:
+                    limited = True
+                    break
+                con.commit()
+                streams += 1
+        if streams:
+            from .analysis import recompute  # derived metrics (max HR, zones, VO2 max) from the new streams
+            recompute(con, settings)
         left = pending_details(con)
-        log.info("strava sync: %d listed, %d details fetched, %d pending%s", listed, fetched, left, ", rate limited" if limited else "")
-        return {"strava_activities": listed, "strava_details": fetched, "strava_pending": left, "strava_rate_limited": limited}
+        log.info("strava sync: %d listed, %d details, %d streams fetched, %d pending%s", listed, fetched, streams, left, ", rate limited" if limited else "")
+        return {"strava_activities": listed, "strava_details": fetched, "strava_streams": streams, "strava_pending": left, "strava_rate_limited": limited}
     finally:
         client.close()

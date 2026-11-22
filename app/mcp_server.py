@@ -6,7 +6,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.responses import JSONResponse
 
-from . import db, payload
+from . import analysis, db, payload
 from .weekly import goal_progress
 from .config import Settings
 
@@ -83,6 +83,8 @@ def build_mcp(settings: Settings, runner) -> FastMCP:
         p = full_payload()
         summary["this_week"] = goal_progress(p["weeks"], p["goals"])
         summary["vo2max"] = p["vo2max"][-1] if p["vo2max"] else None
+        summary["vo2max_estimate"] = (p["fitness"].get("vo2max") or {}).get("estimate")
+        summary["max_hr"] = p["fitness"]["max_hr"]["value"]
         return summary
 
     @mcp.tool()
@@ -142,6 +144,30 @@ def build_mcp(settings: Settings, runner) -> FastMCP:
     def get_personal_bests() -> list[dict]:
         """Fastest 1k / 1 mile / 5k / 10k / half-marathon etc. from Strava best efforts, with the date of each."""
         return full_payload()["prs"]
+
+    @mcp.tool()
+    def get_fitness() -> dict:
+        """Derived fitness metrics with provenance: max HR (highest HR held 30 s in any stream), 30-day resting HR,
+        heart-rate-reserve zone boundaries in bpm, VO2 max estimated from steady running windows (and a VDOT
+        cross-check from the fastest recent 5k/10k), 7-day TRIMP load, and how many Strava streams are stored."""
+        return full_payload()["fitness"]
+
+    @mcp.tool()
+    def get_hr_stream(date_iso: str, step_s: int = 10) -> list[dict]:
+        """Raw second-by-second streams (time, heartrate, distance, velocity, altitude, cadence, grade) for the
+        Strava activities on a date, thinned to one sample per step_s seconds, plus per-activity derived metrics."""
+        con = db.connect(settings.db_path)
+        try:
+            rows = con.execute("SELECT id, name, sport_type FROM strava_activities WHERE substr(COALESCE(start_local, start), 1, 10)=?", (date_iso,)).fetchall()
+            out = []
+            for r in rows:
+                m = con.execute("SELECT * FROM activity_metrics WHERE activity_id=?", (r["id"],)).fetchone()
+                out.append({"activity_id": r["id"], "name": r["name"], "sport_type": r["sport_type"],
+                            "metrics": {k: m[k] for k in m.keys() if k not in ("vo2_windows",)} if m else None,
+                            "stream": analysis.downsampled_stream(con, r["id"], max(1, step_s))})
+            return out
+        finally:
+            con.close()
 
     @mcp.tool()
     def set_vo2max(value: float, date_iso: str | None = None) -> dict:

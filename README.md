@@ -35,7 +35,13 @@ It's a work in progress. I use it daily and keep changing it as I learn what I a
 
 **Running.** Built for a training block (mine is a half marathon). Kilometres this week against a target, runs this week against a goal, average pace over your last four runs, longest recent run, VO2 max. A weekly-distance chart with the goal line, a pace-per-run chart with every run dated, and a table of the last ten runs: distance, duration, pace, strain, average and max heart rate, calories, and exact minutes spent in each heart-rate zone.
 
-**Strava, optionally.** If WHOOP pushes your workouts to Strava, connecting Strava adds what WHOOP's API lacks: per-km splits as a pace chart on each run, elevation gain, cadence, best efforts within a run, and a Personal bests row (1k, mile, 5k, 10k, half). Runs are matched by start time so nothing appears twice.
+**Strava, optionally.** If WHOOP pushes your workouts to Strava, connecting Strava adds what WHOOP's API lacks: per-km splits as a pace chart on each run, elevation gain, cadence, best efforts within a run, and a Personal bests row (1k, mile, 5k, 10k, half). Runs are matched by start time so nothing appears twice. It also stores the full second-by-second streams (heart rate, pace, altitude, cadence) for every activity, which feed the Fitness section.
+
+**Fitness, derived from raw data.** Vendor apps give you scores; this project keeps the raw streams and derives the numbers with methods you can read in `app/analysis.py` and swap later:
+- *Max heart rate* is the highest value held for a full 30 seconds in any activity, so one-second strap spikes don't count.
+- *Heart-rate zones* use heart-rate reserve (Karvonen): Z1–Z5 start at 50/60/70/80/90 % of max minus resting, with resting HR taken as WHOOP's 30-day nightly average. Zone minutes are recomputed from each activity's own stream.
+- *VO2 max* is estimated from steady 3-minute running windows: the oxygen cost of the pace (ACSM running equation) divided by the fraction of heart-rate reserve in use, median over windows and over the last 8 runs. A Daniels VDOT from your fastest recent 5k/10k is shown as a cross-check, and the WHOOP app's own value can be entered by hand for comparison.
+- *Training load* is Banister TRIMP per activity, summed over 7 days.
 
 **Strength.** Sessions this week against a goal, hours this week, average session length and strain, and the last ten sessions with the same per-zone minutes. (WHOOP's API doesn't carry sets, reps or weights, so this is time, effort and heart rate.)
 

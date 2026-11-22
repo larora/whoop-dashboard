@@ -57,6 +57,7 @@ function render() {
   const cur = DATA.weeks.find(w => w.current) || DATA.weeks[DATA.weeks.length - 1], prev = DATA.weeks[DATA.weeks.length - 2];
   const lastRec = [...all].reverse().find(d => d.rec != null) || all[all.length - 1], last = all[all.length - 1], base30 = all.slice(-31, -1);
   const vo2 = DATA.vo2max.length ? DATA.vo2max[DATA.vo2max.length - 1] : null, vo2prev = DATA.vo2max.length > 1 ? DATA.vo2max[DATA.vo2max.length - 2] : null;
+  const est = DATA.fitness && DATA.fitness.vo2max ? DATA.fitness.vo2max.estimate : null;
   const dLabel = days.length <= 14 ? dowLabel : dayLabel, dense = days.length <= 31;
   const exByDay = {}; DATA.workouts.forEach(w => { if (w.cat === "walk") return; const e = exByDay[w.d] ||= { run: 0, strength: 0, other: 0, n: 0 }; e[w.cat === "run" || w.cat === "strength" ? w.cat : "other"] += (w.min || 0) / 60; e.n++; });
   const ex = k => days.map(d => exByDay[d.d] ? +exByDay[d.d][k].toFixed(2) : 0);
@@ -66,8 +67,8 @@ function render() {
     ${kpi("Recovery", lastRec.rec, "%", 0, vsAvg(lastRec.rec, base30.map(d => d.rec), 0), recColor(lastRec.rec), "heart")}
     ${kpi("HRV", lastRec.hrv, "ms", 0, vsAvg(lastRec.hrv, base30.map(d => d.hrv), 0), null, "pulse")}
     <div class="card kpi"><div class="lbl">${icon("lungs", 14)}VO2 max <button class="edit" id="vo2Btn" title="Enter the value from the WHOOP app">✎</button></div>
-      <div class="val">${vo2 ? fmt(vo2.v, 1) : "–"}<small>ml/kg/min</small></div>
-      <div class="cmp">${vo2prev ? `<span class="${vo2.v >= vo2prev.v ? "up" : "down"}">${vo2.v >= vo2prev.v ? "▲" : "▼"} ${Math.abs(vo2.v - vo2prev.v).toFixed(1)}</span> since ${dayLabel(vo2prev.d)}` : vo2 ? `entered ${dayLabel(vo2.d)}` : "not entered yet"}</div>
+      <div class="val">${vo2 ? fmt(vo2.v, 1) : est ? fmt(est, 1) : "–"}<small>ml/kg/min</small></div>
+      <div class="cmp">${vo2 && est ? `WHOOP app · our estimate from runs <b>${fmt(est, 1)}</b>` : vo2prev ? `<span class="${vo2.v >= vo2prev.v ? "up" : "down"}">${vo2.v >= vo2prev.v ? "▲" : "▼"} ${Math.abs(vo2.v - vo2prev.v).toFixed(1)}</span> since ${dayLabel(vo2prev.d)}` : vo2 ? `entered ${dayLabel(vo2.d)}` : est ? `estimated from your runs` : "not entered yet"}</div>
       <form id="vo2Form" class="vo2form" hidden><input type="number" step="0.1" min="10" max="99" name="value" placeholder="e.g. 48.5" required><button class="btn" type="submit">Save</button></form></div>
     ${kpi("Sleep", last.sleep, "h", 1, last.nap ? `incl. ${Math.round(last.nap * 60)} min nap · need ${fmt(last.need, 1)} h` : `need ${fmt(last.need, 1)} h · ${vsAvg(last.sleep, base30.map(d => d.sleep), 1)}`, null, "moon")}
     ${kpi("Day strain", last.strain, "", 1, vsAvg(last.strain, base30.map(d => d.strain), 1), null, "bolt")}
@@ -75,6 +76,9 @@ function render() {
   </div>
   <div class="grid">
     <div class="card full"><h2>${icon("target")}This week</h2><div class="note">Sleep and training against your goals — patterns, not medical advice.</div><ul class="insights" id="ins"></ul></div>
+    <div class="card full"><h2>${icon("pulse")}Fitness</h2><div class="note">Derived from raw heart-rate and pace streams, not from vendor scores · methods in the README</div>
+      <div class="minis" id="fitTiles"></div><div id="fitZones"></div>
+      <h3>VO2 max estimate per run (last 20)</h3><div class="chart" id="cVo2"></div></div>
     <div class="card full"><h2>${icon("run")}Running</h2><div class="note">Half-marathon prep: volume, pace and recent runs</div>
       <div class="minis" id="runTiles"></div>
       <div id="prTiles"></div>
@@ -115,11 +119,11 @@ function render() {
   tsChart($("#cRec"), L, { labelFn: dLabel, labelEvery: every, topLabel: dense ? i => fmt(days[i].rec) : null, bars: [{ values: col("rec") }], barColor: v => recColor(v), lines: [{ values: rolling(col("rec"), 7), color: css("--ink") }], yMin: 0, yMax: 100,
     tip: i => dtip(i, `Recovery <b>${fmt(days[i].rec)}%</b> · HRV ${fmt(days[i].hrv)} ms · RHR ${fmt(days[i].rhr)}`) });
 
-  renderRunning(weeks, cur, prev); renderStrength(cur, prev); renderInsights(days, DATA.weeks, cur, prev);
+  renderFitness(); renderRunning(weeks, cur, prev); renderStrength(cur, prev); renderInsights(days, DATA.weeks, cur, prev);
 
   const wks = DATA.workouts.filter(w => !RANGE || (w.d >= L[0] && w.d <= L[L.length - 1])).slice(0, 40);
   $("#wk").innerHTML = `<tr><th>Date</th>${DATA.strava_connected ? "<th>Source</th>" : ""}<th>Activity</th><th>Duration</th><th>Strain</th><th>Avg / max HR</th><th>kcal</th><th>Distance</th><th>Pace</th><th>HR zones (min)</th></tr>` +
-    (wks.length ? wks.map(w => `<tr><td>${dayLabel(w.d)} ${w.t}</td>${DATA.strava_connected ? `<td>${srcTag(w)}</td>` : ""}<td style="text-transform:capitalize">${w.sport}</td><td>${fmt(w.min)} min</td><td>${fmt(w.strain, 1)}</td><td>${fmt(w.avg_hr)} / ${fmt(w.max_hr)}</td><td>${fmt(w.kcal)}</td><td>${w.km ? w.km + " km" : "–"}</td><td>${w.pace_str ? w.pace_str + " /km" : "–"}</td><td>${zones(w.zones)}</td></tr>`).join("")
+    (wks.length ? wks.map(w => `<tr><td>${dayLabel(w.d)} ${w.t}</td>${DATA.strava_connected ? `<td>${srcTag(w)}</td>` : ""}<td style="text-transform:capitalize">${w.sport}</td><td>${fmt(w.min)} min</td><td>${fmt(w.strain, 1)}</td><td>${fmt(w.avg_hr)} / ${fmt(w.max_hr)}</td><td>${fmt(w.kcal)}</td><td>${w.km ? w.km + " km" : "–"}</td><td>${w.pace_str ? w.pace_str + " /km" : "–"}</td><td>${zones(w.zones, w.zones_src)}</td></tr>`).join("")
       : `<tr><td colspan="10" class="sub">No workouts in this range.</td></tr>`);
 
   $("#vo2Btn").onclick = () => { const f = $("#vo2Form"); f.hidden = !f.hidden; if (!f.hidden) f.value.focus(); };

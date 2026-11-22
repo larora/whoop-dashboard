@@ -22,7 +22,8 @@ class Settings:
     goal_runs: int
     goal_strength: int
     goal_run_km: float
-    max_hr: int | None  # for HR-zone bpm ranges; falls back to the highest HR WHOOP has recorded
+    max_hr: int | None       # override for the max HR derived from heart-rate streams
+    resting_hr: int | None   # override for the 30-day resting HR from WHOOP
     run_sports: tuple[str, ...]
     strength_sports: tuple[str, ...]
     walk_sports: tuple[str, ...]
@@ -71,6 +72,7 @@ def load_settings(env: dict | None = None) -> Settings:
         goal_strength=int(env.get("GOAL_STRENGTH", "3")),
         goal_run_km=float(env.get("GOAL_RUN_KM", "20")),
         max_hr=int(env["MAX_HR"]) if env.get("MAX_HR") else None,
+        resting_hr=int(env["RESTING_HR"]) if env.get("RESTING_HR") else None,
         # WHOOP sport names as they appear in the API (underscores or spaces both match).
         run_sports=_csv(env.get("RUN_SPORTS", "running,treadmill,trail running,track running")),
         strength_sports=_csv(env.get("STRENGTH_SPORTS", "weightlifting,weightlifting msk,strength trainer,strength workout,functional fitness,powerlifting,crossfit")),

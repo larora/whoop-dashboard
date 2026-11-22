@@ -17,6 +17,22 @@ from test_sync import seed_tokens
 RUN_START = "2026-01-10T12:00:30Z"  # WHOOP seed has a running workout at 2026-01-10T12:00:00Z (i=9)
 
 
+def fake_stream(aid: int) -> dict:
+    """2400 s run at 3.33 m/s (5:00/km): HR ramps to 150 over 4 min then holds, with a 20 s spike to 199 at t=1200
+    and a sustained 185 for 66 s at t=1800 (the realistic max). Strength (504) gets a flat 110 bpm."""
+    n = 2400 if aid != 504 else 1800
+    t = list(range(n))
+    if aid == 504:
+        hr = [110] * n; dist = [0.0] * n; v = [0.0] * n
+    else:
+        hr = [min(150, 90 + k / 4) for k in t]
+        for k in range(1200, 1220): hr[k] = 199
+        for k in range(1800, 1866): hr[k] = 185
+        dist = [k * 3.33 for k in t]; v = [3.33] * n
+    return {"time": {"data": t}, "heartrate": {"data": hr}, "distance": {"data": dist}, "velocity_smooth": {"data": v},
+            "altitude": {"data": [100.0] * n}, "cadence": {"data": [85] * n}, "grade_smooth": {"data": [0.0] * n}}
+
+
 class FakeStrava:
     def __init__(self):
         self.calls = []
@@ -42,6 +58,11 @@ class FakeStrava:
                 {"id": 503, "name": "Watch run", "sport_type": "Run", "start_date": "2025-12-01T05:00:00Z", "start_date_local": "2025-12-01T10:30:00Z",
                  "distance": 5000.0, "moving_time": 1500, "elapsed_time": 1500, "total_elevation_gain": 10.0},
             ])
+        if path.endswith("/streams"):
+            aid = int(path.split("/")[-2])
+            if aid == 502:
+                return httpx.Response(404, json={"message": "Record Not Found"})
+            return httpx.Response(200, json=fake_stream(aid))
         if path.startswith("/api/v3/activities/"):
             aid = int(path.rsplit("/", 1)[1])
             if aid == 504:
@@ -84,7 +105,13 @@ def test_sync_stores_activities_and_matches_whoop(strava_settings):
     connect_strava(strava_settings)
     counts = SyncRunner(strava_settings, whoop.transport, strava_transport=strava.transport).run()
     assert counts["strava_activities"] == 4 and counts["strava_details"] == 3  # runs + strength get detail, the ride doesn't
+    assert counts["strava_streams"] == 4 and counts["strava_pending"] == 0
     con = db.connect(strava_settings.db_path)
+    assert con.execute("SELECT COUNT(*) FROM strava_streams").fetchone()[0] == 3  # the ride has no stream (404)
+    assert con.execute("SELECT streams_fetched FROM strava_activities WHERE id=502").fetchone()[0] == -1
+    m = con.execute("SELECT * FROM activity_metrics WHERE activity_id=501").fetchone()
+    assert m["peak_hr"] == 199 and m["hr_30s"] == 185 and m["hr_60s"] == 185  # 20-s spike ignored, 60-s plateau kept
+    assert m["zone_s"] and m["trimp"] > 0
     matched = con.execute("SELECT whoop_workout_id FROM strava_activities WHERE id=501").fetchone()[0]
     assert matched == "w9"  # 30 s after the WHOOP workout start
     assert con.execute("SELECT whoop_workout_id FROM strava_activities WHERE id=503").fetchone()[0] is None
@@ -114,6 +141,15 @@ def test_payload_and_mcp_expose_splits_and_prs(strava_settings):
         ex = lift["strava"]["exercises"]
         assert [e["exercise"] for e in ex] == ["Bench Press", "Squat"] and ex[1]["volume_kg"] == 1500.0
         assert lift["strava"]["notes"] == ["Felt good"]
+        fit = data["fitness"]
+        assert fit["max_hr"] == {**fit["max_hr"], "value": 185, "source": "stream"} and fit["resting_hr"]
+        assert len(fit["zones"]["bounds"]) == 5 and fit["zones"]["bounds"][4] < 185
+        assert run["zones_src"] == "stream" and sum(run["zones"]) >= 38 and run["trimp"] > 0  # 2400 s of HR → ~40 zone minutes
+        assert fit["vo2max"]["runs_used"] >= 1 and 35 < fit["vo2max"]["estimate"] < 75
+        assert fit["vo2max"]["vdot"]["from"] == "5k"
+        r = client.post("/mcp", headers={"Authorization": f"Bearer {MCP_TOKEN}", "Accept": "application/json, text/event-stream", "Content-Type": "application/json"},
+                        json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_hr_stream", "arguments": {"date_iso": "2026-01-10", "step_s": 600}}})
+        assert r.status_code == 200 and '"heartrate"' in r.text and "hr_30s" in r.text
         r = client.post("/mcp", headers={"Authorization": f"Bearer {MCP_TOKEN}", "Accept": "application/json, text/event-stream", "Content-Type": "application/json"},
                         json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_exercise_history", "arguments": {"exercise": "bench"}}})
         assert "Bench Press" in r.text
@@ -160,13 +196,14 @@ def test_rate_limit_stops_cleanly_and_resumes(strava_settings):
     runner = SyncRunner(strava_settings, whoop.transport, strava_transport=httpx.MockTransport(limited))
     counts = runner.run()
     assert runner.last_error is None
-    assert counts["strava_details"] == 1 and counts["strava_pending"] == 2 and counts["strava_rate_limited"]
+    assert counts["strava_details"] == 1 and counts["strava_pending"] == 4 and counts["strava_rate_limited"]  # 4 activities still owed a call
     assert runner.strava_retry_at and runner.strava_retry_at > time.time() + 10 * 60
     budget["left"] = 10
     runner.strava_retry_at = time.time() - 1
     runner.run_pending_strava()
     con = db.connect(strava_settings.db_path)
     assert con.execute("SELECT COUNT(*) FROM strava_activities WHERE detail_fetched=0 AND sport_type IN ('Run','WeightTraining')").fetchone()[0] == 0
+    assert con.execute("SELECT COUNT(*) FROM strava_activities WHERE streams_fetched=0").fetchone()[0] == 0
     con.close()
     assert runner.strava_retry_at is None
 
